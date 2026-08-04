@@ -44,8 +44,33 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Helpers
 // ---------------------------------------------------------------------------
 
+const TIMEZONE = process.env.TIMEZONE || 'Asia/Kolkata';
+
+function getLocalTimeString() {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const parts = formatter.formatToParts(new Date());
+  const hour = parts.find(p => p.type === 'hour').value.padStart(2, '0');
+  const minute = parts.find(p => p.type === 'minute').value.padStart(2, '0');
+  return `${hour}:${minute}`;
+}
+
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find(p => p.type === 'year').value;
+  const month = parts.find(p => p.type === 'month').value;
+  const day = parts.find(p => p.type === 'day').value;
+  return `${year}-${month}-${day}`;
 }
 
 function distanceMeters(lat1, lon1, lat2, lon2) {
@@ -60,9 +85,16 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 function activeSession(s) {
-  const hhmm = new Date().toTimeString().slice(0, 5);
-  if (hhmm >= s.morning_start && hhmm <= s.morning_end) return 'morning';
-  if (hhmm >= s.afternoon_start && hhmm <= s.afternoon_end) return 'afternoon';
+  if (!s) return null;
+  const hhmm = getLocalTimeString();
+  const pad = (t) => String(t || '').trim().padStart(5, '0');
+  const mStart = pad(s.morning_start);
+  const mEnd = pad(s.morning_end);
+  const aStart = pad(s.afternoon_start);
+  const aEnd = pad(s.afternoon_end);
+
+  if (hhmm >= mStart && hhmm <= mEnd) return 'morning';
+  if (hhmm >= aStart && hhmm <= aEnd) return 'afternoon';
   return null;
 }
 

@@ -173,10 +173,28 @@
 
   label { display: block; font-size: 11px; font-weight: 800; color: var(--muted); margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.07em; }
   .field { margin-bottom: 14px; }
-  input[type=text], input[type=tel], input[type=email] {
-    width: 100%; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--line); font-size: 15px; outline: none; transition: .18s; background: rgba(250,252,255,.8); color: var(--ink);
+  input[type=text], input[type=tel], input[type=email], select {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1.5px solid var(--line);
+    font-size: 15px;
+    outline: none;
+    transition: .18s;
+    background: rgba(250,252,255,.8);
+    color: var(--ink);
+    -webkit-appearance: none;
+    appearance: none;
   }
-  input:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(48,107,255,.11); background: #fff; }
+  select {
+    background-image: url("data:image/svg+xml;utf8,<svg fill='%236b7891' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 20px;
+    padding-right: 36px;
+    cursor: pointer;
+  }
+  input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(48,107,255,.11); background: #fff; }
   .optional { font-weight: 500; color: #9aa7bd; text-transform: none; }
 
   button.action-btn {
@@ -287,17 +305,17 @@
       </div>
       <div class="field">
         <label for="regBranch">Branch</label>
-        <input type="text" id="regBranch" list="branchList" placeholder="e.g. Computer Science & Engineering" autocomplete="off" />
-        <datalist id="branchList">
-          <option value="Computer Science & Engineering">
-          <option value="Computer Science & Engineering (IoT)">
-          <option value="Electronics & Communication Engineering">
-          <option value="Electrical Engineering">
-          <option value="Mechanical Engineering">
-          <option value="Civil Engineering">
-          <option value="Information Technology">
-          <option value="Textile Engineering">
-        </datalist>
+        <select id="regBranch">
+          <option value="" disabled selected>Select your branch</option>
+          <option value="Computer Science & Engineering">Computer Science & Engineering</option>
+          <option value="Computer Science & Engineering (IoT)">Computer Science & Engineering (IoT)</option>
+          <option value="Electronics & Communication Engineering">Electronics & Communication Engineering</option>
+          <option value="Electrical Engineering">Electrical Engineering</option>
+          <option value="Mechanical Engineering">Mechanical Engineering</option>
+          <option value="Civil Engineering">Civil Engineering</option>
+          <option value="Information Technology">Information Technology</option>
+          <option value="Textile Engineering">Textile Engineering</option>
+        </select>
       </div>
       <div class="field">
         <label for="regMobile">Mobile Number</label>

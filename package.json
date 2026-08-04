@@ -1,0 +1,14 @@
+{
+  "name": "attendance-face-system",
+  "version": "1.0.0",
+  "description": "Face recognition attendance system for student induction programs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.16.3"
+  }
+}

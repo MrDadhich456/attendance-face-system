@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Induction Attendance — Admin Dashboard</title>
+<style>
+  :root {
+    --bg: #09152c;
+    --card: rgba(255,255,255,.96);
+    --ink: #162440;
+    --ink-soft: #687693;
+    --primary: #396cff;
+    --primary-dark: #244bc6;
+    --line: #e3e9f5;
+    --good: #109d74;
+    --bad: #dc4e50;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 10% 0, #1d407c 0, transparent 27%), var(--bg);
+    color: var(--ink);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 40px 24px 72px; }
+  h1 { font-size: 28px; letter-spacing: -.045em; margin: 0 0 4px; color: #fff; }
+  .sub { color: #b4c2df; font-size: 14px; margin-bottom: 24px; }
+
+  #loginCard {
+    max-width: 380px;
+    margin: 100px auto;
+    background: var(--card);
+    padding: 32px;
+    border-radius: 24px;
+    box-shadow: 0 28px 70px rgba(0,0,0,.3);
+  }
+  #loginCard h1 { color: var(--ink); }
+  #loginCard .sub { color: var(--ink-soft); }
+  #loginCard input { width: 100%; padding: 12px; border-radius: 10px; border: 1.5px solid var(--line); margin-bottom: 14px; font-size: 15px; }
+  #loginCard button { width: 100%; padding: 12px; border: none; border-radius: 10px; background: var(--primary); color: #fff; font-weight: 700; cursor: pointer; }
+
+  .stat-row { display: flex; gap: 14px; margin-bottom: 22px; }
+  .stat {
+    flex: 1;
+    background: linear-gradient(135deg, #fff, #eef3ff);
+    border-radius: 18px;
+    padding: 18px;
+    text-align: center;
+    box-shadow: 0 10px 22px rgba(2,16,51,.14);
+  }
+  .stat .n { font-size: 26px; font-weight: 800; color: var(--primary-dark); }
+  .stat .l { font-size: 12px; color: var(--ink-soft); margin-top: 2px; font-weight: 600; }
+
+  .nav-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .nav-tab {
+    padding: 10px 20px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #b4c2df;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+  .nav-tab.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(57, 108, 255, 0.4);
+  }
+
+  .section-view { display: none; }
+  .section-view.active { display: block; }
+
+  .panel { background: var(--card); border-radius: 22px; padding: 24px; box-shadow: 0 16px 40px rgba(0,8,28,.18); margin-bottom: 24px; }
+  .panel h2 { font-size: 16px; margin: 0 0 16px; color: var(--ink); }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 5px; }
+  .field input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--line); font-size: 14px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  button.primary {
+    padding: 11px 18px; border: none; border-radius: 10px;
+    background: linear-gradient(100deg, var(--primary), #8058ff);
+    color: #fff; font-weight: 800; font-size: 13px; cursor: pointer;
+    box-shadow: 0 8px 18px rgba(57,108,255,.24);
+  }
+  button.primary:hover { background: var(--primary-dark); }
+  button.ghost {
+    padding: 9px 14px; border: 1.5px solid var(--line); border-radius: 9px;
+    background: transparent; color: var(--ink); font-weight: 600; font-size: 13px; cursor: pointer;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; padding: 10px 12px; color: var(--ink-soft); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 1.5px solid var(--line); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  
+  .avatar-thumb {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1.5px solid var(--line);
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .badge.confidence { background: #e6f4ea; color: #137333; }
+  .badge.session { background: #e8f0fe; color: #1a73e8; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--ink); color: #fff; padding: 11px 20px; border-radius: 12px;
+    font-size: 13.5px; opacity: 0; transition: opacity .2s; pointer-events: none;
+    box-shadow: 0 12px 28px rgba(0,0,0,.3);
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="loginCard">
+  <h1 style="font-size: 20px;">Admin Login</h1>
+  <p class="sub">Face Recognition Induction Dashboard</p>
+  <input type="password" id="pw" placeholder="Admin password" onkeyup="if(event.key==='Enter') login()" />
+  <button onclick="login()">Sign in</button>
+</div>
+
+<div class="wrap" id="dash" style="display: none;">
+  <h1>Induction Dashboard</h1>
+  <div class="sub">Geofenced Face Recognition Attendance System</div>
+
+  <div class="stat-row">
+    <div class="stat"><div class="n" id="statRegistered">–</div><div class="l">Registered Faces</div></div>
+    <div class="stat"><div class="n" id="statPresent">–</div><div class="l">Present Today</div></div>
+    <div class="stat"><div class="n" id="statBranches">–</div><div class="l">Branches Present</div></div>
+  </div>
+
+  <!-- Navigation -->
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showTab('attendance')">📋 Attendance Log</button>
+    <button class="nav-tab" onclick="showTab('students')">👥 Registered Students</button>
+    <button class="nav-tab" onclick="showTab('settings')">⚙️ Geofence Settings</button>
+  </div>
+
+  <!-- TAB 1: Attendance Log -->
+  <div class="section-view active" id="tab-attendance">
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+        <h2 style="margin:0;">Attendance Records</h2>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="date" id="dateFilter" style="padding:8px 10px; border-radius:8px; border:1.5px solid var(--line); font-size:13px;" />
+          <button class="ghost" onclick="loadAttendance()">Refresh</button>
+          <button class="primary" onclick="exportCsv()">Export CSV</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Branch</th>
+              <th>Mobile</th>
+              <th>Session</th>
+              <th>Time</th>
+              <th>Distance</th>
+              <th>Match Score</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="attBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: Registered Students -->
+  <div class="section-view" id="tab-students">
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h2 style="margin:0;">Student Face Directory</h2>
+        <button class="ghost" onclick="loadStudents()">Refresh</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Photo</th>
+              <th>Name</th>
+              <th>Branch</th>
+              <th>Mobile</th>
+              <th>Registered At</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="studentsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: Venue & Settings -->
+  <div class="section-view" id="tab-settings">
+    <div class="panel" style="max-width: 600px;">
+      <h2>Venue Geofence & Timing Settings</h2>
+      <div class="field"><label>Venue Label</label><input id="venueLabel" /></div>
+      <div class="row2">
+        <div class="field"><label>Latitude</label><input id="venueLat" type="number" step="any" /></div>
+        <div class="field"><label>Longitude</label><input id="venueLng" type="number" step="any" /></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Radius (meters)</label><input id="radius" type="number" /></div>
+        <div class="field"><button class="ghost" style="margin-top:22px; width:100%;" onclick="useMyLocation()">Use My Location</button></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Morning Window Start</label><input id="morningStart" type="time" /></div>
+        <div class="field"><label>Morning Window End</label><input id="morningEnd" type="time" /></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Afternoon Window Start</label><input id="afternoonStart" type="time" /></div>
+        <div class="field"><label>Afternoon Window End</label><input id="afternoonEnd" type="time" /></div>
+      </div>
+      <button class="primary" style="margin-top:10px;" onclick="saveSettings()">Save Settings</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let PW = sessionStorage.getItem('admin_pw') || '';
+
+  function toast(text) {
+    const t = document.getElementById('toast');
+    t.textContent = text; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  function showTab(tabName) {
+    document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.section-view').forEach(s => s.classList.remove('active'));
+    
+    event.target.classList.add('active');
+    document.getElementById('tab-' + tabName).classList.add('active');
+
+    if (tabName === 'attendance') loadAttendance();
+    if (tabName === 'students') loadStudents();
+    if (tabName === 'settings') loadSettings();
+  }
+
+  async function api(path, opts = {}) {
+    opts.headers = Object.assign({ 'x-admin-password': PW, 'Content-Type': 'application/json' }, opts.headers || {});
+    const res = await fetch(path, opts);
+    if (res.status === 401) {
+      sessionStorage.removeItem('admin_pw');
+      location.reload();
+      throw new Error('Unauthorized');
+    }
+    return res.json();
+  }
+
+  async function login() {
+    PW = document.getElementById('pw').value;
+    const res = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: PW }) });
+    const data = await res.json();
+    if (data.ok) {
+      sessionStorage.setItem('admin_pw', PW);
+      document.getElementById('loginCard').style.display = 'none';
+      document.getElementById('dash').style.display = 'block';
+      document.getElementById('dateFilter').value = new Date().toISOString().slice(0, 10);
+      loadDashboard();
+    } else {
+      toast('Wrong password');
+    }
+  }
+
+  if (PW) {
+    document.getElementById('loginCard').style.display = 'none';
+    document.getElementById('dash').style.display = 'block';
+    document.getElementById('dateFilter').value = new Date().toISOString().slice(0, 10);
+    loadDashboard();
+  }
+
+  async function loadDashboard() {
+    loadAttendance();
+    loadStudents();
+    loadSettings();
+  }
+
+  async function loadSettings() {
+    const s = await api('/api/admin/settings');
+    document.getElementById('venueLabel').value = s.venue_label || '';
+    document.getElementById('venueLat').value = s.venue_lat;
+    document.getElementById('venueLng').value = s.venue_lng;
+    document.getElementById('radius').value = s.radius_m;
+    document.getElementById('morningStart').value = s.morning_start;
+    document.getElementById('morningEnd').value = s.morning_end;
+    document.getElementById('afternoonStart').value = s.afternoon_start;
+    document.getElementById('afternoonEnd').value = s.afternoon_end;
+  }
+
+  async function saveSettings() {
+    await api('/api/admin/settings', {
+      method: 'POST',
+      body: JSON.stringify({
+        venue_label: document.getElementById('venueLabel').value,
+        venue_lat: parseFloat(document.getElementById('venueLat').value),
+        venue_lng: parseFloat(document.getElementById('venueLng').value),
+        radius_m: parseFloat(document.getElementById('radius').value),
+        morning_start: document.getElementById('morningStart').value,
+        morning_end: document.getElementById('morningEnd').value,
+        afternoon_start: document.getElementById('afternoonStart').value,
+        afternoon_end: document.getElementById('afternoonEnd').value,
+      })
+    });
+    toast('Settings saved');
+  }
+
+  function useMyLocation() {
+    navigator.geolocation.getCurrentPosition(pos => {
+      document.getElementById('venueLat').value = pos.coords.latitude;
+      document.getElementById('venueLng').value = pos.coords.longitude;
+      toast('Filled current coordinates');
+    }, () => toast('Could not get location'));
+  }
+
+  async function loadAttendance() {
+    const date = document.getElementById('dateFilter').value;
+    const data = await api('/api/admin/attendance?date=' + date);
+    document.getElementById('statPresent').textContent = data.presentCount;
+    document.getElementById('statBranches').textContent = data.branchCount;
+
+    const body = document.getElementById('attBody');
+    body.innerHTML = data.present.map(r => `<tr>
+      <td>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <img src="${r.photo || 'https://via.placeholder.com/42'}" class="avatar-thumb" style="cursor:pointer;" onclick="previewPhoto('${r.photo}', '${escapeHtml(r.name)}')" title="Click to view full photo" />
+          <strong>${escapeHtml(r.name)}</strong>
+        </div>
+      </td>
+      <td>${escapeHtml(r.branch)}</td>
+      <td>${escapeHtml(r.mobile)}</td>
+      <td><span class="badge session">${r.session === 'morning' ? 'Before lunch' : 'After lunch'}</span></td>
+      <td>${new Date(r.timestamp).toLocaleTimeString()}</td>
+      <td>${r.distance_m ? Math.round(r.distance_m) + 'm' : '—'}</td>
+      <td><span class="badge confidence">${r.match_confidence ? r.match_confidence + '%' : '—'}</span></td>
+      <td><button class="ghost" onclick="deleteAttendance(${r.id})">Delete</button></td>
+    </tr>`).join('') || '<tr><td colspan="8" style="text-align:center; color:#8B93A6; padding:20px;">No check-ins found for this date</td></tr>';
+  }
+
+  async function loadStudents() {
+    const data = await api('/api/admin/students');
+    document.getElementById('statRegistered').textContent = data.count;
+
+    const body = document.getElementById('studentsBody');
+    body.innerHTML = data.students.map(s => `<tr>
+      <td><img src="${s.photo || 'https://via.placeholder.com/42'}" class="avatar-thumb" style="cursor:pointer;" onclick="previewPhoto('${s.photo}', '${escapeHtml(s.name)}')" title="Click to view full photo" /></td>
+      <td><strong>${escapeHtml(s.name)}</strong><br/><small style="color:var(--ink-soft);">${escapeHtml(s.email || '')}</small></td>
+      <td>${escapeHtml(s.branch)}</td>
+      <td>${escapeHtml(s.mobile)}</td>
+      <td>${new Date(s.registered_at).toLocaleDateString()}</td>
+      <td><button class="ghost" onclick="deleteStudent(${s.id})">Remove</button></td>
+    </tr>`).join('') || '<tr><td colspan="6" style="text-align:center; color:#8B93A6; padding:20px;">No registered faces yet</td></tr>';
+  }
+
+  function previewPhoto(photoSrc, studentName) {
+    if (!photoSrc) return;
+    const modal = document.getElementById('photoModal');
+    document.getElementById('modalImg').src = photoSrc;
+    document.getElementById('modalTitle').textContent = studentName || 'Student Photo';
+    modal.style.display = 'flex';
+  }
+
+  function closeModal() {
+    document.getElementById('photoModal').style.display = 'none';
+  }
+
+  function escapeHtml(val) {
+    return String(val || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  async function deleteAttendance(id) {
+    if (!confirm('Delete this attendance record?')) return;
+    const data = await api('/api/admin/attendance/' + id, { method: 'DELETE' });
+    toast(data.ok ? 'Record deleted' : data.error);
+    loadAttendance();
+  }
+
+  async function deleteStudent(id) {
+    if (!confirm('Delete this registered student face? They will need to re-register.')) return;
+    const data = await api('/api/admin/students/' + id, { method: 'DELETE' });
+    toast(data.ok ? 'Student removed' : data.error);
+    loadStudents();
+  }
+
+  function exportCsv() {
+    const date = document.getElementById('dateFilter').value;
+    fetch('/api/admin/attendance/export?date=' + date, { headers: { 'x-admin-password': PW } })
+      .then(r => r.blob())
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `attendance_face_${date}.csv`;
+        a.click();
+      });
+  }
+</script>
+
+<!-- Photo Preview Modal -->
+<div id="photoModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(6px); z-index:9999; align-items:center; justify-content:center; padding:20px;" onclick="closeModal()">
+  <div style="background:#fff; padding:20px; border-radius:20px; max-width:380px; width:100%; text-align:center; position:relative; box-shadow:0 20px 50px rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
+    <h3 id="modalTitle" style="margin:0 0 14px; font-size:17px; color:var(--ink);">Student Photo</h3>
+    <img id="modalImg" src="" style="width:100%; max-height:360px; object-fit:contain; border-radius:12px; border:1px solid var(--line);" />
+    <button class="ghost" style="margin-top:16px; width:100%;" onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+</body>
+</html>

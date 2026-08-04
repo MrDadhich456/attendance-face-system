@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Induction Face Check-In</title>
+<!-- Load face-api.js -->
+<script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
+<style>
+  :root {
+    --navy: #0b1630;
+    --blue: #306bff;
+    --violet: #8058ff;
+    --aqua: #29d8c0;
+    --ink: #14223d;
+    --muted: #6b7891;
+    --line: #dfe7f7;
+    --card: rgba(255, 255, 255, 0.92);
+    --good: #0d9a70;
+    --bad: #df4d48;
+    --warn: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--ink);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    background: var(--navy);
+    position: relative;
+    overflow-x: hidden;
+  }
+  body::before, body::after {
+    content: "";
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(20px);
+    pointer-events: none;
+  }
+  body::before {
+    width: 500px; height: 500px;
+    top: -200px; left: -150px;
+    background: radial-gradient(circle, #3d80ff 0, rgba(61,128,255,0) 70%);
+  }
+  body::after {
+    width: 450px; height: 450px;
+    right: -150px; bottom: -200px;
+    background: radial-gradient(circle, #9e62ff 0, rgba(158,98,255,0) 70%);
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: var(--card);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 28px;
+    padding: 28px 24px;
+    box-shadow: 0 28px 70px rgba(1, 9, 28, 0.36);
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: "";
+    height: 5px;
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    background: linear-gradient(90deg, var(--aqua), var(--blue), var(--violet));
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--blue);
+    font-weight: 800;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 20px;
+    height: 2px;
+    background: var(--aqua);
+    border-radius: 8px;
+  }
+  h1 { font-size: 26px; line-height: 1.1; margin: 0 0 6px; letter-spacing: -0.04em; }
+  .venue { font-size: 13px; color: var(--muted); margin-bottom: 18px; font-weight: 600; }
+
+  /* Mode Switcher Tabs */
+  .tabs {
+    display: flex;
+    background: #eaf0fa;
+    border-radius: 14px;
+    padding: 4px;
+    margin-bottom: 20px;
+    gap: 4px;
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+  }
+  .tab-btn.active {
+    background: #fff;
+    color: var(--blue);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Camera Container */
+  .camera-box {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/3;
+    background: #000;
+    border-radius: 18px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1); /* mirror preview */
+  }
+  canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    transform: scaleX(-1);
+  }
+  .face-overlay-guide {
+    position: absolute;
+    width: 55%;
+    height: 70%;
+    border: 2px dashed rgba(255, 255, 255, 0.6);
+    border-radius: 50%;
+    pointer-events: none;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+    transition: border-color 0.3s;
+  }
+  .camera-box.ready .face-overlay-guide { border-color: var(--aqua); }
+  .camera-box.matched .face-overlay-guide { border-color: var(--good); }
+  .camera-status {
+    position: absolute;
+    bottom: 10px;
+    left: 10px; right: 10px;
+    background: rgba(11, 22, 48, 0.85);
+    backdrop-filter: blur(6px);
+    color: #fff;
+    font-size: 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    text-align: center;
+    font-weight: 600;
+  }
+
+  label { display: block; font-size: 11px; font-weight: 800; color: var(--muted); margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.07em; }
+  .field { margin-bottom: 14px; }
+  input[type=text], input[type=tel], input[type=email] {
+    width: 100%; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--line); font-size: 15px; outline: none; transition: .18s; background: rgba(250,252,255,.8); color: var(--ink);
+  }
+  input:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(48,107,255,.11); background: #fff; }
+  .optional { font-weight: 500; color: #9aa7bd; text-transform: none; }
+
+  button.action-btn {
+    width: 100%;
+    padding: 14px;
+    border: 0;
+    border-radius: 14px;
+    background: linear-gradient(100deg, var(--blue), var(--violet));
+    color: white;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: .02em;
+    cursor: pointer;
+    transition: .2s;
+    margin-top: 6px;
+    box-shadow: 0 10px 22px rgba(69,83,223,.27);
+  }
+  button.action-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+  button.action-btn:active { transform: scale(0.98); }
+  button.action-btn:disabled { background: #B9C2D2; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .msg {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    display: none;
+  }
+  .msg.show { display: block; }
+  .msg.good { background: #e8fbf4; color: var(--good); border: 1px solid rgba(13,154,112,0.2); }
+  .msg.bad { background: #fff0ed; color: var(--bad); border: 1px solid rgba(223,77,72,0.2); }
+  .msg.info { background: #eef3ff; color: #31549e; border: 1px solid rgba(48,107,255,0.2); }
+
+  /* Match Card Result */
+  .student-match-card {
+    display: none;
+    align-items: center;
+    gap: 16px;
+    background: #f0f7ff;
+    border: 1.5px solid #cce2ff;
+    border-radius: 16px;
+    padding: 14px;
+    margin-top: 14px;
+  }
+  .student-match-card.show { display: flex; }
+  .student-match-card img {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--blue);
+  }
+  .student-info h3 { margin: 0 0 4px; font-size: 16px; color: var(--ink); }
+  .student-info p { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; }
+  .confidence-tag {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--good);
+    background: #d1fae5;
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+
+  .fineprint { margin-top: 18px; font-size: 11px; color: #8b98ae; line-height: 1.5; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="eyebrow">Induction Attendance</div>
+    <h1>Face Recognition Check-In</h1>
+    <div class="venue" id="venueLabel">Loading venue details…</div>
+
+    <!-- Mode Selector -->
+    <div class="tabs">
+      <button class="tab-btn active" id="tabCheckIn" onclick="switchMode('checkin')">📷 Check In</button>
+      <button class="tab-btn" id="tabRegister" onclick="switchMode('register')">👤 Register Face</button>
+    </div>
+
+    <!-- Camera Viewport -->
+    <div class="camera-box" id="cameraBox">
+      <video id="video" playsinline autoplay muted></video>
+      <canvas id="overlayCanvas"></canvas>
+      <div class="face-overlay-guide"></div>
+      <div class="camera-status" id="cameraStatus">Initializing AI models…</div>
+    </div>
+
+    <!-- Check-In Mode View -->
+    <div id="checkInView">
+      <button class="action-btn" id="checkInBtn" disabled onclick="handleCheckIn()">Scan Face & Check In</button>
+      
+      <div class="student-match-card" id="matchCard">
+        <img id="matchPhoto" src="" alt="Student Photo" />
+        <div class="student-info">
+          <h3 id="matchName">Name</h3>
+          <p id="matchBranch">Branch</p>
+          <span class="confidence-tag" id="matchConfidence">Match 95%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Register Mode View -->
+    <div id="registerView" style="display: none;">
+      <div class="field">
+        <label for="regName">Full Name</label>
+        <input type="text" id="regName" placeholder="e.g. Aarav Sharma" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="regBranch">Branch</label>
+        <input type="text" id="regBranch" list="branchList" placeholder="e.g. Computer Science & Engineering" autocomplete="off" />
+        <datalist id="branchList">
+          <option value="Computer Science & Engineering">
+          <option value="Computer Science & Engineering (IoT)">
+          <option value="Electronics & Communication Engineering">
+          <option value="Electrical Engineering">
+          <option value="Mechanical Engineering">
+          <option value="Civil Engineering">
+          <option value="Information Technology">
+          <option value="Textile Engineering">
+        </datalist>
+      </div>
+      <div class="field">
+        <label for="regMobile">Mobile Number</label>
+        <input type="tel" id="regMobile" placeholder="10-digit mobile number" maxlength="10" inputmode="numeric" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="regEmail">Email <span class="optional">(optional)</span></label>
+        <input type="email" id="regEmail" placeholder="you@example.com" autocomplete="off" />
+      </div>
+
+      <button class="action-btn" id="registerBtn" disabled onclick="handleRegister()">Register Face & Save Details</button>
+    </div>
+
+    <div class="msg" id="msg"></div>
+
+    <div class="fineprint">
+      Camera & location are used only during check-in/registration to verify attendance within the venue radius.
+    </div>
+  </div>
+
+<script>
+  let modelsLoaded = false;
+  let currentMode = 'checkin'; // 'checkin' | 'register'
+  let currentDescriptor = null;
+  let currentPhotoBase64 = null;
+  let lastPosition = null;
+
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('overlayCanvas');
+  const cameraBox = document.getElementById('cameraBox');
+  const cameraStatus = document.getElementById('cameraStatus');
+  const msg = document.getElementById('msg');
+  const venueLabel = document.getElementById('venueLabel');
+  const checkInBtn = document.getElementById('checkInBtn');
+  const registerBtn = document.getElementById('registerBtn');
+
+  // Format mobile input
+  document.getElementById('regMobile').addEventListener('input', (e) => {
+    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+  });
+
+  function getDeviceId() {
+    let id = localStorage.getItem('induction_device_id');
+    if (!id) {
+      id = 'dev_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem('induction_device_id', id);
+    }
+    return id;
+  }
+  const deviceId = getDeviceId();
+
+  function showMsg(text, type) {
+    msg.textContent = text;
+    msg.className = 'msg show ' + type;
+  }
+
+  function hideMsg() {
+    msg.className = 'msg';
+  }
+
+  function switchMode(mode) {
+    currentMode = mode;
+    document.getElementById('tabCheckIn').className = 'tab-btn' + (mode === 'checkin' ? ' active' : '');
+    document.getElementById('tabRegister').className = 'tab-btn' + (mode === 'register' ? ' active' : '');
+    document.getElementById('checkInView').style.display = mode === 'checkin' ? 'block' : 'none';
+    document.getElementById('registerView').style.display = mode === 'register' ? 'block' : 'none';
+    document.getElementById('matchCard').classList.remove('show');
+    hideMsg();
+  }
+
+  async function loadStatus() {
+    try {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+      if (data.ok) {
+        venueLabel.textContent = `${data.venue.label} · within ${data.venue.radius}m`;
+        if (!data.window.open) {
+          showMsg(data.window.message, 'info');
+        } else {
+          showMsg(`${data.window.label} attendance is open. Registered students: ${data.registeredStudents}`, 'info');
+        }
+      }
+    } catch (e) {
+      venueLabel.textContent = 'Could not reach server.';
+    }
+  }
+  loadStatus();
+
+  // Load face-api models from jsDelivr CDN
+  async function loadModels() {
+    try {
+      cameraStatus.textContent = 'Loading face detection AI models…';
+      const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+      ]);
+      modelsLoaded = true;
+      cameraStatus.textContent = 'Starting camera…';
+      startCamera();
+    } catch (err) {
+      console.error('Failed to load face-api models:', err);
+      cameraStatus.textContent = 'Failed to load face detection models. Please refresh.';
+      showMsg('Failed to load AI face detection models. Check your internet connection.', 'bad');
+    }
+  }
+
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+        audio: false
+      });
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        video.play();
+        cameraStatus.textContent = 'Position your face in the oval guide';
+        startFaceDetectionLoop();
+      };
+    } catch (err) {
+      console.error('Camera access denied:', err);
+      cameraStatus.textContent = 'Camera permission required.';
+      showMsg('Camera access is required for face check-in. Please allow camera permissions.', 'bad');
+    }
+  }
+
+  let detectionInterval = null;
+  function startFaceDetectionLoop() {
+    if (detectionInterval) clearInterval(detectionInterval);
+
+    detectionInterval = setInterval(async () => {
+      if (!modelsLoaded || video.paused || video.ended) return;
+
+      const displaySize = { width: video.videoWidth, height: video.videoHeight };
+      if (displaySize.width === 0 || displaySize.height === 0) return;
+
+      faceapi.matchDimensions(canvas, displaySize);
+
+      const detection = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (detection) {
+        const resized = faceapi.resizeResults(detection, displaySize);
+        // Draw custom subtle face box
+        const { x, y, width, height } = resized.detection.box;
+        ctx.strokeStyle = '#29d8c0';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x, y, width, height);
+
+        currentDescriptor = Array.from(detection.descriptor);
+        cameraBox.className = 'camera-box ready';
+        cameraStatus.textContent = 'Face detected! Ready.';
+        
+        checkInBtn.disabled = false;
+        registerBtn.disabled = false;
+      } else {
+        currentDescriptor = null;
+        cameraBox.className = 'camera-box';
+        cameraStatus.textContent = 'Align face inside the circle guide';
+        checkInBtn.disabled = true;
+        registerBtn.disabled = true;
+      }
+    }, 250);
+  }
+
+  function captureSnapshot() {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = 320;
+    tempCanvas.height = 240;
+    const ctx = tempCanvas.getContext('2d');
+    // Mirror image back to normal orientation
+    ctx.translate(320, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, 320, 240);
+    return tempCanvas.toDataURL('image/jpeg', 0.85);
+  }
+
+  function getLocation() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Browser does not support location services.'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve(pos.coords),
+        err => {
+          let m = 'Could not get location.';
+          if (err.code === 1) m = 'Location permission denied. Please allow location access.';
+          if (err.code === 2) m = 'Location unavailable. Stand in an open area.';
+          if (err.code === 3) m = 'Location request timed out.';
+          reject(new Error(m));
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      );
+    });
+  }
+
+  async function handleCheckIn() {
+    if (!currentDescriptor) {
+      showMsg('Face not detected. Keep your face inside the frame.', 'bad');
+      return;
+    }
+
+    checkInBtn.disabled = true;
+    showMsg('Getting location & matching face…', 'info');
+
+    try {
+      const coords = await getLocation();
+      const res = await fetch('/api/recognize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          descriptor: currentDescriptor,
+          lat: coords.latitude,
+          lng: coords.longitude,
+          accuracy: coords.accuracy,
+          deviceId
+        })
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        cameraBox.className = 'camera-box matched';
+        showMsg(data.message + ` (${data.distance}m from venue)`, 'good');
+        
+        // Show matched student profile
+        document.getElementById('matchName').textContent = data.student.name;
+        document.getElementById('matchBranch').textContent = data.student.branch;
+        document.getElementById('matchPhoto').src = data.student.photo || 'https://via.placeholder.com/64';
+        document.getElementById('matchConfidence').textContent = `Match Confidence: ${data.confidence}%`;
+        document.getElementById('matchCard').className = 'student-match-card show';
+      } else {
+        showMsg(data.error, 'bad');
+        checkInBtn.disabled = false;
+        if (data.student) {
+          document.getElementById('matchName').textContent = data.student.name;
+          document.getElementById('matchBranch').textContent = data.student.branch;
+          document.getElementById('matchPhoto').src = 'https://via.placeholder.com/64';
+          document.getElementById('matchConfidence').textContent = 'Verification Failed';
+          document.getElementById('matchCard').className = 'student-match-card show';
+        }
+      }
+    } catch (e) {
+      showMsg(e.message, 'bad');
+      checkInBtn.disabled = false;
+    }
+  }
+
+  async function handleRegister() {
+    const name = document.getElementById('regName').value.trim();
+    const branch = document.getElementById('regBranch').value.trim();
+    const mobile = document.getElementById('regMobile').value.trim();
+    const email = document.getElementById('regEmail').value.trim();
+
+    if (!name) { showMsg('Enter full name.', 'bad'); return; }
+    if (!branch) { showMsg('Enter branch.', 'bad'); return; }
+    if (!/^\d{10}$/.test(mobile)) { showMsg('Enter a valid 10-digit mobile number.', 'bad'); return; }
+    if (!currentDescriptor) { showMsg('Ensure your face is clearly visible in the camera preview.', 'bad'); return; }
+
+    registerBtn.disabled = true;
+    showMsg('Capturing face & registering student…', 'info');
+
+    try {
+      const photo = captureSnapshot();
+      let coords = null;
+      try {
+        coords = await getLocation();
+      } catch (locErr) {
+        console.warn('Geolocation warning during registration:', locErr.message);
+      }
+
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name, branch, mobile, email,
+          photo,
+          descriptor: currentDescriptor,
+          lat: coords ? coords.latitude : null,
+          lng: coords ? coords.longitude : null,
+          accuracy: coords ? coords.accuracy : null
+        })
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        showMsg(data.message, 'good');
+        setTimeout(() => {
+          switchMode('checkin');
+          loadStatus();
+        }, 2000);
+      } else {
+        showMsg(data.error, 'bad');
+        registerBtn.disabled = false;
+      }
+    } catch (e) {
+      showMsg(e.message, 'bad');
+      registerBtn.disabled = false;
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    // Start face api model loading after page mounts
+    setTimeout(loadModels, 500);
+  });
+</script>
+</body>
+</html>

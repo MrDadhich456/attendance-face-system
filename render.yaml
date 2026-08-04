@@ -8,9 +8,11 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DATABASE_SSL
+        value: "true"
+      - key: FACE_MATCH_THRESHOLD
+        value: "0.6"
       - key: ADMIN_PASSWORD
         sync: false
       - key: DATABASE_URL
         sync: false
-      - key: FACE_MATCH_THRESHOLD
-        value: "0.6"

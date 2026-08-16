@@ -4,8 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <title>Induction Face Check-In</title>
-<!-- Load face-api.js -->
-<script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
+<!-- Bundled locally so face detection does not depend on a CDN connection. -->
+<script defer src="/vendor/face-api/face-api.js"></script>
 <style>
   :root {
     --navy: #0b1630;
@@ -342,6 +342,7 @@
   let currentDescriptor = null;
   let currentPhotoBase64 = null;
   let lastPosition = null;
+  let detectionInProgress = false;
 
   const video = document.getElementById('video');
   const canvas = document.getElementById('overlayCanvas');
@@ -386,10 +387,21 @@
     hideMsg();
   }
 
+  async function fetchJson(url, options = {}, timeout = 15000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      const data = await response.json();
+      return { response, data };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function loadStatus() {
     try {
-      const res = await fetch('/api/status');
-      const data = await res.json();
+      const { data } = await fetchJson('/api/status', {}, 8000);
       if (data.ok) {
         venueLabel.textContent = `${data.venue.label} · within ${data.venue.radius}m`;
         if (!data.window.open) {
@@ -404,11 +416,11 @@
   }
   loadStatus();
 
-  // Load face-api models from jsDelivr CDN
+  // Models are bundled with this app, so the first scan does not need a CDN.
   async function loadModels() {
     try {
       cameraStatus.textContent = 'Loading face detection AI models…';
-      const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+      const MODEL_URL = '/vendor/face-api/model/';
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
         faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -450,15 +462,24 @@
     detectionInterval = setInterval(async () => {
       if (!modelsLoaded || video.paused || video.ended) return;
 
+      if (detectionInProgress) return;
       const displaySize = { width: video.videoWidth, height: video.videoHeight };
       if (displaySize.width === 0 || displaySize.height === 0) return;
 
-      faceapi.matchDimensions(canvas, displaySize);
-
-      const detection = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
-        .withFaceLandmarks()
-        .withFaceDescriptor();
+      detectionInProgress = true;
+      let detection;
+      try {
+        faceapi.matchDimensions(canvas, displaySize);
+        detection = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.55 }))
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+      } catch (err) {
+        console.warn('Face scan failed:', err);
+        return;
+      } finally {
+        detectionInProgress = false;
+      }
 
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -484,19 +505,19 @@
         checkInBtn.disabled = true;
         registerBtn.disabled = true;
       }
-    }, 250);
+    }, 600);
   }
 
   function captureSnapshot() {
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = 320;
-    tempCanvas.height = 240;
+    tempCanvas.width = 240;
+    tempCanvas.height = 180;
     const ctx = tempCanvas.getContext('2d');
     // Mirror image back to normal orientation
-    ctx.translate(320, 0);
+    ctx.translate(240, 0);
     ctx.scale(-1, 1);
-    ctx.drawImage(video, 0, 0, 320, 240);
-    return tempCanvas.toDataURL('image/jpeg', 0.85);
+    ctx.drawImage(video, 0, 0, 240, 180);
+    return tempCanvas.toDataURL('image/jpeg', 0.65);
   }
 
   function getLocation() {
@@ -514,7 +535,7 @@
           if (err.code === 3) m = 'Location request timed out.';
           reject(new Error(m));
         },
-        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
       );
     });
   }
@@ -530,7 +551,7 @@
 
     try {
       const coords = await getLocation();
-      const res = await fetch('/api/recognize', {
+      const { data } = await fetchJson('/api/recognize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -540,8 +561,7 @@
           accuracy: coords.accuracy,
           deviceId
         })
-      });
-      const data = await res.json();
+      }, 15000);
 
       if (data.ok) {
         cameraBox.className = 'camera-box matched';
@@ -582,30 +602,32 @@
     if (!currentDescriptor) { showMsg('Ensure your face is clearly visible in the camera preview.', 'bad'); return; }
 
     registerBtn.disabled = true;
-    showMsg('Capturing face & registering student…', 'info');
+    showMsg('Saving your face registration…', 'info');
 
     try {
+      // Freeze the successful scan now. Do not wait for GPS: it can take many
+      // seconds on weak networks and registration is already validated by face.
       const photo = captureSnapshot();
-      let coords = null;
-      try {
-        coords = await getLocation();
-      } catch (locErr) {
-        console.warn('Geolocation warning during registration:', locErr.message);
-      }
-
-      const res = await fetch('/api/register', {
+      const descriptor = [...currentDescriptor];
+      const payload = {
+        name, branch, mobile, email, photo, descriptor,
+        lat: lastPosition ? lastPosition.latitude : null,
+        lng: lastPosition ? lastPosition.longitude : null,
+        accuracy: lastPosition ? lastPosition.accuracy : null
+      };
+      const request = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name, branch, mobile, email,
-          photo,
-          descriptor: currentDescriptor,
-          lat: coords ? coords.latitude : null,
-          lng: coords ? coords.longitude : null,
-          accuracy: coords ? coords.accuracy : null
-        })
-      });
-      const data = await res.json();
+        body: JSON.stringify(payload)
+      };
+      let data;
+      try {
+        ({ data } = await fetchJson('/api/register', request, 20000));
+      } catch (err) {
+        // A response may be lost after the server has saved the student. Retry
+        // once with the identical request; the server handles this idempotently.
+        ({ data } = await fetchJson('/api/register', request, 20000));
+      }
 
       if (data.ok) {
         showMsg(data.message, 'good');
@@ -624,6 +646,16 @@
   }
 
   window.addEventListener('DOMContentLoaded', () => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(err => console.warn('Offline cache unavailable:', err));
+    }
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => { lastPosition = pos.coords; },
+        () => {},
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
+      );
+    }
     // Start face api model loading after page mounts
     setTimeout(loadModels, 500);
   });

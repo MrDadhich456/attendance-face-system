@@ -292,6 +292,15 @@ app.post('/api/register', async (req, res, next) => {
     // Reject if face already matches an existing student
     const existingMatch = await findBestMatch(descriptor);
     if (existingMatch) {
+      // A weak connection can lose the success response. Treat a retry for the
+      // same mobile and face as success, so one registration attempt is safe.
+      if (existingMatch.student.mobile === mobileDigits) {
+        return res.json({
+          ok: true,
+          alreadyRegistered: true,
+          message: `${name} is already registered. You can now check in with your face.`,
+        });
+      }
       return res.status(409).json({
         ok: false,
         error: `This face is already registered under "${existingMatch.student.name}" (${existingMatch.student.branch}). Contact admin if this is wrong.`,
@@ -318,6 +327,17 @@ app.post('/api/register', async (req, res, next) => {
       );
     } catch (err) {
       if (err.code === '23505') {
+        const saved = (await pool.query(
+          'SELECT name, face_descriptor FROM students WHERE mobile = $1',
+          [mobileDigits]
+        )).rows[0];
+        if (saved && euclideanDistance(descriptor, saved.face_descriptor) <= FACE_MATCH_THRESHOLD) {
+          return res.json({
+            ok: true,
+            alreadyRegistered: true,
+            message: `${saved.name} is already registered. You can now check in with your face.`,
+          });
+        }
         return res
           .status(409)
           .json({ ok: false, error: 'This mobile number is already registered.' });

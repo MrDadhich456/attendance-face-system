@@ -8,17 +8,17 @@
 <script defer src="/vendor/face-api/face-api.js"></script>
 <style>
   :root {
-    --navy: #0b1630;
-    --blue: #306bff;
-    --violet: #8058ff;
-    --aqua: #29d8c0;
-    --ink: #14223d;
-    --muted: #6b7891;
-    --line: #dfe7f7;
-    --card: rgba(255, 255, 255, 0.92);
-    --good: #0d9a70;
-    --bad: #df4d48;
-    --warn: #f59e0b;
+    --navy: #050a17;
+    --blue: #7194ff;
+    --violet: #a578ff;
+    --aqua: #46e0ca;
+    --ink: #f2f6ff;
+    --muted: #a6b3cf;
+    --line: #263553;
+    --card: rgba(14, 23, 45, 0.94);
+    --good: #4ee2a8;
+    --bad: #ff8989;
+    --warn: #fbc660;
   }
   * { box-sizing: border-box; }
   body {
@@ -30,7 +30,10 @@
     align-items: center;
     justify-content: center;
     padding: 24px 16px;
-    background: var(--navy);
+    background:
+      radial-gradient(circle at 12% 8%, rgba(65, 103, 255, .22), transparent 31rem),
+      radial-gradient(circle at 90% 92%, rgba(150, 83, 255, .16), transparent 26rem),
+      var(--navy);
     position: relative;
     overflow-x: hidden;
   }
@@ -38,28 +41,28 @@
     content: "";
     position: fixed;
     border-radius: 50%;
-    filter: blur(20px);
+    filter: blur(35px);
     pointer-events: none;
   }
   body::before {
     width: 500px; height: 500px;
     top: -200px; left: -150px;
-    background: radial-gradient(circle, #3d80ff 0, rgba(61,128,255,0) 70%);
+    background: radial-gradient(circle, rgba(41, 111, 255, .34) 0, rgba(61,128,255,0) 70%);
   }
   body::after {
     width: 450px; height: 450px;
     right: -150px; bottom: -200px;
-    background: radial-gradient(circle, #9e62ff 0, rgba(158,98,255,0) 70%);
+    background: radial-gradient(circle, rgba(142, 86, 255, .28) 0, rgba(158,98,255,0) 70%);
   }
   .card {
     width: 100%;
     max-width: 480px;
     background: var(--card);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px) saturate(130%);
+    border: 1px solid rgba(159, 181, 255, .18);
     border-radius: 28px;
     padding: 28px 24px;
-    box-shadow: 0 28px 70px rgba(1, 9, 28, 0.36);
+    box-shadow: 0 28px 70px rgba(0, 0, 0, .48), inset 0 1px 0 rgba(255, 255, 255, .04);
     position: relative;
     overflow: hidden;
   }
@@ -94,7 +97,8 @@
   /* Mode Switcher Tabs */
   .tabs {
     display: flex;
-    background: #eaf0fa;
+    background: #090f20;
+    border: 1px solid rgba(155, 177, 238, .13);
     border-radius: 14px;
     padding: 4px;
     margin-bottom: 20px;
@@ -114,9 +118,9 @@
     text-align: center;
   }
   .tab-btn.active {
-    background: #fff;
-    color: var(--blue);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    background: linear-gradient(135deg, #273b78, #41307e);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .24);
   }
 
   /* Camera Container */
@@ -124,7 +128,9 @@
     position: relative;
     width: 100%;
     aspect-ratio: 4/3;
-    background: #000;
+    background: #030712;
+    border: 1px solid rgba(165, 184, 255, .18);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .03);
     border-radius: 18px;
     overflow: hidden;
     margin-bottom: 16px;
@@ -161,7 +167,7 @@
     position: absolute;
     bottom: 10px;
     left: 10px; right: 10px;
-    background: rgba(11, 22, 48, 0.85);
+    background: rgba(5, 10, 23, 0.82);
     backdrop-filter: blur(6px);
     color: #fff;
     font-size: 12px;
@@ -181,7 +187,7 @@
     font-size: 15px;
     outline: none;
     transition: .18s;
-    background: rgba(250,252,255,.8);
+    background: rgba(7, 14, 30, .82);
     color: var(--ink);
     -webkit-appearance: none;
     appearance: none;
@@ -194,15 +200,17 @@
     padding-right: 36px;
     cursor: pointer;
   }
-  input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(48,107,255,.11); background: #fff; }
-  .optional { font-weight: 500; color: #9aa7bd; text-transform: none; }
+  input::placeholder { color: #71809d; }
+  input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(113,148,255,.15); background: #0c1730; }
+  select option { background: #0d1730; color: var(--ink); }
+  .optional { font-weight: 500; color: #8390ad; text-transform: none; }
 
   button.action-btn {
     width: 100%;
     padding: 14px;
     border: 0;
     border-radius: 14px;
-    background: linear-gradient(100deg, var(--blue), var(--violet));
+    background: linear-gradient(100deg, #527cff, #9a68f5);
     color: white;
     font-size: 15px;
     font-weight: 800;
@@ -210,11 +218,11 @@
     cursor: pointer;
     transition: .2s;
     margin-top: 6px;
-    box-shadow: 0 10px 22px rgba(69,83,223,.27);
+    box-shadow: 0 10px 24px rgba(66, 86, 229, .28);
   }
   button.action-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
   button.action-btn:active { transform: scale(0.98); }
-  button.action-btn:disabled { background: #B9C2D2; cursor: not-allowed; transform: none; box-shadow: none; }
+  button.action-btn:disabled { background: #26334d; color: #7d8aa5; cursor: not-allowed; transform: none; box-shadow: none; }
 
   .msg {
     margin-top: 14px;
@@ -225,17 +233,17 @@
     display: none;
   }
   .msg.show { display: block; }
-  .msg.good { background: #e8fbf4; color: var(--good); border: 1px solid rgba(13,154,112,0.2); }
-  .msg.bad { background: #fff0ed; color: var(--bad); border: 1px solid rgba(223,77,72,0.2); }
-  .msg.info { background: #eef3ff; color: #31549e; border: 1px solid rgba(48,107,255,0.2); }
+  .msg.good { background: rgba(32, 141, 103, .16); color: var(--good); border: 1px solid rgba(78,226,168,.26); }
+  .msg.bad { background: rgba(192, 56, 72, .16); color: var(--bad); border: 1px solid rgba(255,137,137,.24); }
+  .msg.info { background: rgba(63, 101, 205, .16); color: #b6c8ff; border: 1px solid rgba(113,148,255,.24); }
 
   /* Match Card Result */
   .student-match-card {
     display: none;
     align-items: center;
     gap: 16px;
-    background: #f0f7ff;
-    border: 1.5px solid #cce2ff;
+    background: rgba(35, 76, 122, .28);
+    border: 1.5px solid rgba(105, 166, 255, .35);
     border-radius: 16px;
     padding: 14px;
     margin-top: 14px;
@@ -255,12 +263,12 @@
     font-size: 11px;
     font-weight: 700;
     color: var(--good);
-    background: #d1fae5;
+    background: rgba(36, 151, 108, .24);
     padding: 2px 8px;
     border-radius: 6px;
   }
 
-  .fineprint { margin-top: 18px; font-size: 11px; color: #8b98ae; line-height: 1.5; text-align: center; }
+  .fineprint { margin-top: 18px; font-size: 11px; color: #8f9db8; line-height: 1.5; text-align: center; }
 </style>
 </head>
 <body>

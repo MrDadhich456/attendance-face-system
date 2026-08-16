@@ -1,4 +1,4 @@
-const CACHE = 'face-attendance-v2';
+const CACHE = 'face-attendance-v3';
 const APP_FILES = ['/', '/index.html', '/admin.html'];
 
 self.addEventListener('install', event => {

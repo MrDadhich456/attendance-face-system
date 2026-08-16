@@ -385,6 +385,7 @@ app.post('/api/recognize', async (req, res, next) => {
     if (dist > venue.radius_m) {
       return res.status(403).json({
         ok: false,
+        reason: 'outside_venue',
         error: `You are ${Math.round(dist)}m away. Must be within ${venue.radius_m}m of the venue.`,
         student: { name: match.student.name, branch: match.student.branch },
       });
@@ -395,6 +396,7 @@ app.post('/api/recognize', async (req, res, next) => {
     if (!session) {
       return res.status(403).json({
         ok: false,
+        reason: 'attendance_closed',
         error: `Attendance is closed. Windows: ${venue.morning_start}–${venue.morning_end} and ${venue.afternoon_start}–${venue.afternoon_end}.`,
         student: { name: match.student.name, branch: match.student.branch },
       });
@@ -427,6 +429,7 @@ app.post('/api/recognize', async (req, res, next) => {
       if (err.code === '23505') {
         return res.status(409).json({
           ok: false,
+          reason: 'already_marked',
           error: `${sessionLabel(session)} attendance already marked today.`,
           student: {
             name: match.student.name,

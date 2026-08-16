@@ -586,7 +586,12 @@
           document.getElementById('matchName').textContent = data.student.name;
           document.getElementById('matchBranch').textContent = data.student.branch;
           document.getElementById('matchPhoto').src = 'https://via.placeholder.com/64';
-          document.getElementById('matchConfidence').textContent = 'Verification Failed';
+          const statusLabel = {
+            already_marked: 'Attendance already marked',
+            outside_venue: 'You are away from the venue',
+            attendance_closed: 'Attendance window is closed'
+          }[data.reason] || 'Check-in could not be completed';
+          document.getElementById('matchConfidence').textContent = statusLabel;
           document.getElementById('matchCard').className = 'student-match-card show';
         }
       }

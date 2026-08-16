@@ -134,11 +134,9 @@ function euclideanDistance(a, b) {
   return Math.sqrt(sum);
 }
 
-async function findBestMatch(descriptor, includePhoto = false) {
+async function findBestMatch(descriptor) {
   const { rows } = await pool.query(
-    // Photos can be much larger than descriptors. Do not transfer every
-    // student's photo during each scan; fetch only the matched student's photo.
-    'SELECT id, name, branch, mobile, email, face_descriptor FROM students'
+    'SELECT id, name, branch, mobile, email, face_descriptor, photo FROM students'
   );
   let best = null;
   let bestDist = Infinity;
@@ -150,11 +148,6 @@ async function findBestMatch(descriptor, includePhoto = false) {
     }
   }
   if (best && bestDist <= FACE_MATCH_THRESHOLD) {
-    let photo = null;
-    if (includePhoto) {
-      const photoResult = await pool.query('SELECT photo FROM students WHERE id = $1', [best.id]);
-      photo = photoResult.rows[0]?.photo || null;
-    }
     return {
       student: {
         id: best.id,
@@ -162,7 +155,7 @@ async function findBestMatch(descriptor, includePhoto = false) {
         branch: best.branch,
         mobile: best.mobile,
         email: best.email,
-        photo,
+        photo: best.photo,
       },
       distance: bestDist,
       confidence: Math.max(0, Math.round((1 - bestDist / FACE_MATCH_THRESHOLD) * 100)),
@@ -378,7 +371,7 @@ app.post('/api/recognize', async (req, res, next) => {
     }
 
     // Match
-    const match = await findBestMatch(descriptor, true);
+    const match = await findBestMatch(descriptor);
     if (!match) {
       return res.status(404).json({
         ok: false,
@@ -610,24 +603,13 @@ app.use((err, _req, res, _next) => {
 // Start
 // ---------------------------------------------------------------------------
 
-if (require.main === module) {
-  initializeDatabase()
-    .then(() =>
-      app.listen(PORT, () =>
-        console.log(`Face attendance server running on http://localhost:${PORT}`)
-      )
+initializeDatabase()
+  .then(() =>
+    app.listen(PORT, () =>
+      console.log(`Face attendance server running on http://localhost:${PORT}`)
     )
-    .catch((err) => {
-      console.error('Database startup failed:', err);
-      process.exit(1);
-    });
-}
-
-module.exports = {
-  activeSession,
-  distanceMeters,
-  euclideanDistance,
-  isValidMobile,
-  normalizeMobile,
-  sessionLabel,
-};
+  )
+  .catch((err) => {
+    console.error('Database startup failed:', err);
+    process.exit(1);
+  });

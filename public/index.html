@@ -351,6 +351,7 @@
   let currentDescriptor = null;
   let currentPhotoBase64 = null;
   let lastPosition = null;
+  let lastPositionAt = 0;
   let detectionInProgress = false;
 
   const video = document.getElementById('video');
@@ -529,24 +530,49 @@
     return tempCanvas.toDataURL('image/jpeg', 0.65);
   }
 
-  function getLocation() {
+  function rememberPosition(pos) {
+    lastPosition = pos.coords;
+    lastPositionAt = pos.timestamp || Date.now();
+    return pos.coords;
+  }
+
+  function requestLocation(options) {
     return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('Browser does not support location services.'));
-        return;
-      }
       navigator.geolocation.getCurrentPosition(
-        pos => resolve(pos.coords),
-        err => {
-          let m = 'Could not get location.';
-          if (err.code === 1) m = 'Location permission denied. Please allow location access.';
-          if (err.code === 2) m = 'Location unavailable. Stand in an open area.';
-          if (err.code === 3) m = 'Location request timed out.';
-          reject(new Error(m));
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+        pos => resolve(rememberPosition(pos)),
+        reject,
+        options
       );
     });
+  }
+
+  async function getLocation() {
+    if (!navigator.geolocation) {
+      throw new Error('Browser does not support location services.');
+    }
+
+    // A position obtained moments ago is still suitable for the venue check and
+    // avoids making students wait again after the camera has found their face.
+    if (lastPosition && Date.now() - lastPositionAt < 5 * 60 * 1000) {
+      return lastPosition;
+    }
+
+    try {
+      // GPS can take 20+ seconds to acquire indoors, especially on a first use.
+      return await requestLocation({ enableHighAccuracy: true, timeout: 30000, maximumAge: 120000 });
+    } catch (highAccuracyError) {
+      try {
+        // Network-based location is a useful fallback when a GPS fix is slow.
+        return await requestLocation({ enableHighAccuracy: false, timeout: 15000, maximumAge: 10 * 60 * 1000 });
+      } catch (fallbackError) {
+        const err = fallbackError.code ? fallbackError : highAccuracyError;
+        let message = 'Could not get location. Please try again.';
+        if (err.code === 1) message = 'Location permission denied. Please allow location access and try again.';
+        if (err.code === 2) message = 'Location unavailable. Turn on Location Services and try again.';
+        if (err.code === 3) message = 'Location is taking too long. Move near a window or open area, then try again.';
+        throw new Error(message);
+      }
+    }
   }
 
   async function handleCheckIn() {
@@ -665,9 +691,10 @@
     }
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        pos => { lastPosition = pos.coords; },
+        rememberPosition,
         () => {},
-        { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
+        // Start acquiring a position before the student taps Check In.
+        { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }
       );
     }
     // Start face api model loading after page mounts

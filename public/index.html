@@ -398,9 +398,9 @@
       </div>
 
       <div class="field">
-        <label for="studentRoll">Roll Number</label>
-        <input type="text" id="studentRoll" placeholder="e.g. 2024CSE001" maxlength="30" required />
-        <div class="hint" id="rollHint">3–30 alphanumeric characters</div>
+        <label for="studentMobile">Mobile Number</label>
+        <input type="tel" id="studentMobile" placeholder="10-digit mobile number" maxlength="10" inputmode="numeric" pattern="[0-9]{10}" required />
+        <div class="hint" id="mobileHint">Enter your 10-digit mobile number</div>
       </div>
 
       <button type="submit" class="action-btn" id="submitBtn" disabled>
@@ -415,7 +415,7 @@
       <div class="result-details">
         <h3 id="resultName">Name</h3>
         <p id="resultBranch">Branch</p>
-        <p id="resultRoll">Roll Number</p>
+        <p id="resultMobile">Mobile</p>
         <span class="session-tag" id="resultSession">Before lunch</span>
         <p id="resultDist" style="margin-top: 6px; font-size: 11px; color: #8f9db8;"></p>
       </div>
@@ -452,8 +452,8 @@
   const locText = document.getElementById('locText');
   const nameInput = document.getElementById('studentName');
   const branchSelect = document.getElementById('studentBranch');
-  const rollInput = document.getElementById('studentRoll');
-  const rollHint = document.getElementById('rollHint');
+  const mobileInput = document.getElementById('studentMobile');
+  const mobileHint = document.getElementById('mobileHint');
 
   // ---------------------------------------------------------------------------
   // Device ID — persistent fingerprint in localStorage
@@ -495,42 +495,36 @@
   // ---------------------------------------------------------------------------
   // Form validation
   // ---------------------------------------------------------------------------
-  function isValidRoll(val) {
-    return /^[A-Za-z0-9\-\/]{3,30}$/.test(val);
+  function isValidMobile(val) {
+    return /^\d{10}$/.test(val.replace(/\D/g, ''));
   }
 
   function validateForm() {
     const name = nameInput.value.trim();
     const branch = branchSelect.value;
-    const roll = rollInput.value.trim();
+    const mobile = mobileInput.value.replace(/\D/g, '');
 
-    const valid = name.length >= 2 && branch && isValidRoll(roll) && lastPosition && sessionOpen && !cooldownActive;
+    const valid = name.length >= 2 && branch && isValidMobile(mobile) && lastPosition && sessionOpen && !cooldownActive;
     submitBtn.disabled = !valid || isSubmitting;
     return valid;
   }
 
-  // Live validation on roll number
-  rollInput.addEventListener('input', () => {
-    const val = rollInput.value.trim();
+  // Live validation on mobile number — allow only digits
+  mobileInput.addEventListener('input', () => {
+    mobileInput.value = mobileInput.value.replace(/\D/g, '').slice(0, 10);
+    const val = mobileInput.value;
     if (val.length === 0) {
-      rollInput.className = '';
-      rollHint.className = 'hint';
-    } else if (isValidRoll(val)) {
-      rollInput.className = 'valid';
-      rollHint.className = 'hint';
+      mobileInput.className = '';
+      mobileHint.className = 'hint';
+    } else if (val.length === 10) {
+      mobileInput.className = 'valid';
+      mobileHint.className = 'hint';
     } else {
-      rollInput.className = 'invalid';
-      rollHint.className = 'hint show error';
-      rollHint.textContent = '3–30 alphanumeric characters, hyphens, or slashes only';
+      mobileInput.className = 'invalid';
+      mobileHint.className = 'hint show error';
+      mobileHint.textContent = 'Enter exactly 10 digits';
     }
     validateForm();
-  });
-
-  // Auto-uppercase roll number as they type
-  rollInput.addEventListener('input', () => {
-    const pos = rollInput.selectionStart;
-    rollInput.value = rollInput.value.toUpperCase();
-    rollInput.setSelectionRange(pos, pos);
   });
 
   nameInput.addEventListener('input', validateForm);
@@ -644,11 +638,11 @@
 
     const name = nameInput.value.trim();
     const branch = branchSelect.value;
-    const rollNumber = rollInput.value.trim().toUpperCase();
+    const mobile = mobileInput.value.replace(/\D/g, '');
 
     if (!name || name.length < 2) { showMsg('Enter your full name.', 'bad'); return; }
     if (!branch) { showMsg('Select your branch.', 'bad'); return; }
-    if (!isValidRoll(rollNumber)) { showMsg('Enter a valid roll number.', 'bad'); return; }
+    if (!isValidMobile(mobile)) { showMsg('Enter a valid 10-digit mobile number.', 'bad'); return; }
 
     isSubmitting = true;
     submitBtn.disabled = true;
@@ -664,7 +658,7 @@
       const payload = {
         name,
         branch,
-        rollNumber,
+        mobile,
         lat: coords.latitude,
         lng: coords.longitude,
         accuracy: coords.accuracy,
@@ -693,7 +687,7 @@
         // Show result card
         document.getElementById('resultName').textContent = data.student.name;
         document.getElementById('resultBranch').textContent = data.student.branch;
-        document.getElementById('resultRoll').textContent = `Roll: ${data.student.rollNumber}`;
+        document.getElementById('resultMobile').textContent = `Mobile: ${data.student.mobile}`;
         document.getElementById('resultSession').textContent = data.message;
         document.getElementById('resultDist').textContent = `${data.distance}m from venue`;
         resultCard.classList.add('show');

@@ -185,14 +185,14 @@
           <button class="primary" onclick="exportCsv()">Export CSV</button>
         </div>
       </div>
-      <input type="text" class="search-bar" id="attSearch" placeholder="Search by name, branch, or roll number…" oninput="filterAttendanceTable()" />
+      <input type="text" class="search-bar" id="attSearch" placeholder="Search by name, branch, or mobile number…" oninput="filterAttendanceTable()" />
       <div style="overflow-x:auto;">
         <table>
           <thead>
             <tr>
               <th>Name</th>
               <th>Branch</th>
-              <th>Roll Number</th>
+              <th>Mobile</th>
               <th>Session</th>
               <th>Time</th>
               <th>Distance</th>
@@ -376,7 +376,7 @@
     body.innerHTML = rows.map(r => `<tr>
       <td><strong>${escapeHtml(r.name)}</strong></td>
       <td>${escapeHtml(r.branch)}</td>
-      <td><code style="background:#f0f2f8; padding:2px 6px; border-radius:4px; font-size:12px;">${escapeHtml(r.roll_number)}</code></td>
+      <td><code style="background:#f0f2f8; padding:2px 6px; border-radius:4px; font-size:12px;">${escapeHtml(r.mobile)}</code></td>
       <td><span class="badge session">${r.session === 'morning' ? 'Before lunch' : 'After lunch'}</span></td>
       <td>${new Date(r.timestamp).toLocaleTimeString()}</td>
       <td>${r.distance_m ? Math.round(r.distance_m) + 'm' : '—'}</td>
@@ -393,7 +393,7 @@
     const filtered = attendanceData.filter(r =>
       r.name.toLowerCase().includes(query) ||
       r.branch.toLowerCase().includes(query) ||
-      r.roll_number.toLowerCase().includes(query)
+      (r.mobile || '').includes(query)
     );
     renderAttendanceTable(filtered);
   }
@@ -411,7 +411,7 @@
     body.innerHTML = data.devices.map(d => `<tr>
       <td><span class="badge device">${escapeHtml(d.device_id.slice(0, 16))}…</span></td>
       <td><span class="badge session">${d.session === 'morning' ? 'Before lunch' : 'After lunch'}</span></td>
-      <td><code style="background:#f0f2f8; padding:2px 6px; border-radius:4px; font-size:12px;">${escapeHtml(d.roll_number)}</code></td>
+      <td><code style="background:#f0f2f8; padding:2px 6px; border-radius:4px; font-size:12px;">${escapeHtml(d.mobile)}</code></td>
       <td>${new Date(d.marked_at).toLocaleTimeString()}</td>
     </tr>`).join('');
   }

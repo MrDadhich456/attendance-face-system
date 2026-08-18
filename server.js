@@ -146,9 +146,12 @@ function sanitize(val) {
   return typeof val === 'string' ? val.trim().replace(/\s+/g, ' ') : '';
 }
 
-function isValidRollNumber(roll) {
-  // Accept alphanumeric roll numbers, 3-30 chars
-  return /^[A-Za-z0-9\-\/]{3,30}$/.test(roll);
+function normalizeMobile(mobile) {
+  return String(mobile || '').replace(/\D/g, '');
+}
+
+function isValidMobile(mobile) {
+  return /^\d{10}$/.test(normalizeMobile(mobile));
 }
 
 async function getSettings() {
@@ -179,13 +182,15 @@ async function initializeDatabase() {
   // The old 'attendance' table had columns (student_id, mobile, match_confidence)
   // that don't exist in v2, and lacked roll_number/device_id/ip_address.
   // We detect the old schema by checking for columns that no longer exist.
-  const oldSchemaCheck = await pool.query(`
+  // Detect old schema (v1 had student_id, v2 had roll_number) and migrate
+  const oldV1Check = await pool.query(`
     SELECT column_name FROM information_schema.columns
-    WHERE table_name = 'attendance' AND column_name = 'student_id'
+    WHERE table_name = 'attendance' AND column_name IN ('student_id', 'roll_number')
   `);
-  if (oldSchemaCheck.rows.length > 0) {
-    console.log('Detected old v1 schema — migrating to v2...');
+  if (oldV1Check.rows.length > 0) {
+    console.log('Detected old schema — migrating to current version...');
     await pool.query('DROP TABLE IF EXISTS attendance CASCADE');
+    await pool.query('DROP TABLE IF EXISTS device_limits CASCADE');
     await pool.query('DROP TABLE IF EXISTS students CASCADE');
     console.log('Old tables dropped. Recreating with new schema...');
   }
@@ -207,7 +212,7 @@ async function initializeDatabase() {
       id BIGSERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       branch TEXT NOT NULL,
-      roll_number TEXT NOT NULL,
+      mobile TEXT NOT NULL,
       date TEXT NOT NULL,
       session TEXT NOT NULL DEFAULT 'morning',
       timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -223,14 +228,14 @@ async function initializeDatabase() {
       device_id TEXT NOT NULL,
       date TEXT NOT NULL,
       session TEXT NOT NULL,
-      roll_number TEXT NOT NULL,
+      mobile TEXT NOT NULL,
       marked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (device_id, date, session)
     );
 
     CREATE INDEX IF NOT EXISTS idx_att_date ON attendance(date);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_att_roll_date_session
-      ON attendance(roll_number, date, session);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_att_mobile_date_session
+      ON attendance(mobile, date, session);
     CREATE INDEX IF NOT EXISTS idx_device_limits_date ON device_limits(date);
   `);
 
@@ -276,12 +281,12 @@ app.get('/api/status', async (req, res, next) => {
 // Check-in — the single attendance endpoint
 app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
   try {
-    let { name, branch, rollNumber, lat, lng, accuracy, deviceId } = req.body || {};
+    let { name, branch, mobile, lat, lng, accuracy, deviceId } = req.body || {};
 
     // Sanitize & validate
     name = sanitize(name);
     branch = sanitize(branch);
-    rollNumber = sanitize(rollNumber).toUpperCase();
+    const mobileClean = normalizeMobile(mobile);
     const deviceIdClean = sanitize(deviceId);
     const ipAddress = getClientIP(req);
 
@@ -291,10 +296,10 @@ app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
     if (!branch) {
       return res.status(400).json({ ok: false, error: 'Select your branch.' });
     }
-    if (!rollNumber || !isValidRollNumber(rollNumber)) {
+    if (!isValidMobile(mobileClean)) {
       return res.status(400).json({
         ok: false,
-        error: 'Enter a valid roll number (3–30 alphanumeric characters).',
+        error: 'Enter a valid 10-digit mobile number.',
       });
     }
     if (!deviceIdClean) {
@@ -338,7 +343,7 @@ app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
 
       // Check 1: Has this device already marked attendance in this session today?
       const deviceCheck = await client.query(
-        'SELECT roll_number FROM device_limits WHERE device_id = $1 AND date = $2 AND session = $3',
+        'SELECT mobile FROM device_limits WHERE device_id = $1 AND date = $2 AND session = $3',
         [deviceIdClean, date, session]
       );
       if (deviceCheck.rows.length > 0) {
@@ -350,28 +355,28 @@ app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
         });
       }
 
-      // Check 2: Has this roll number already been marked for this session?
-      const rollCheck = await client.query(
-        'SELECT id FROM attendance WHERE roll_number = $1 AND date = $2 AND session = $3',
-        [rollNumber, date, session]
+      // Check 2: Has this mobile number already been marked for this session?
+      const mobileCheck = await client.query(
+        'SELECT id FROM attendance WHERE mobile = $1 AND date = $2 AND session = $3',
+        [mobileClean, date, session]
       );
-      if (rollCheck.rows.length > 0) {
+      if (mobileCheck.rows.length > 0) {
         await client.query('ROLLBACK');
         return res.status(409).json({
           ok: false,
           reason: 'already_marked',
-          error: `${sessionLabel(session)} attendance for roll number ${rollNumber} is already marked today.`,
+          error: `${sessionLabel(session)} attendance for this mobile number is already marked today.`,
         });
       }
 
       // Insert attendance record
       await client.query(
         `INSERT INTO attendance
-           (name, branch, roll_number, date, session, timestamp,
+           (name, branch, mobile, date, session, timestamp,
             lat, lng, accuracy, distance_m, device_id, ip_address)
          VALUES ($1,$2,$3,$4,$5,NOW(),$6,$7,$8,$9,$10,$11)`,
         [
-          name, branch, rollNumber, date, session,
+          name, branch, mobileClean, date, session,
           lat, lng,
           Number.isFinite(accuracy) ? accuracy : null,
           dist, deviceIdClean, ipAddress,
@@ -380,9 +385,9 @@ app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
 
       // Insert device limit record
       await client.query(
-        `INSERT INTO device_limits (device_id, date, session, roll_number)
+        `INSERT INTO device_limits (device_id, date, session, mobile)
          VALUES ($1, $2, $3, $4)`,
-        [deviceIdClean, date, session, rollNumber]
+        [deviceIdClean, date, session, mobileClean]
       );
 
       await client.query('COMMIT');
@@ -390,7 +395,7 @@ app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
       res.json({
         ok: true,
         message: `${sessionLabel(session)} attendance marked successfully!`,
-        student: { name, branch, rollNumber },
+        student: { name, branch, mobile: mobileClean },
         distance: Math.round(dist),
       });
     } catch (txErr) {
@@ -416,7 +421,7 @@ app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
         return res.status(409).json({
           ok: false,
           reason: 'already_marked',
-          error: `${sessionLabel(session)} attendance for roll number ${rollNumber} is already marked today.`,
+          error: `${sessionLabel(session)} attendance for this mobile number is already marked today.`,
         });
       }
       throw txErr;
@@ -479,7 +484,7 @@ app.get('/api/admin/attendance', requireAdmin, async (req, res, next) => {
     const date = req.query.date || todayStr();
     const rows = (
       await pool.query(
-        `SELECT id, name, branch, roll_number, session,
+        `SELECT id, name, branch, mobile, session,
                 timestamp, distance_m, device_id, ip_address
          FROM attendance
          WHERE date = $1 ORDER BY timestamp`,
@@ -513,7 +518,7 @@ app.get('/api/admin/attendance/export', requireAdmin, async (req, res, next) => 
     const date = req.query.date || todayStr();
     const rows = (
       await pool.query(
-        `SELECT name, branch, roll_number, session, timestamp,
+        `SELECT name, branch, mobile, session, timestamp,
                 ROUND(distance_m::numeric, 1) AS distance_m, device_id, ip_address
          FROM attendance WHERE date = $1 ORDER BY timestamp`,
         [date]
@@ -521,9 +526,9 @@ app.get('/api/admin/attendance/export', requireAdmin, async (req, res, next) => 
     ).rows;
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = [
-      'name,branch,roll_number,session,timestamp,distance_m,device_id,ip_address',
+      'name,branch,mobile,session,timestamp,distance_m,device_id,ip_address',
       ...rows.map((r) =>
-        [r.name, r.branch, r.roll_number, r.session, r.timestamp.toISOString(), r.distance_m, r.device_id, r.ip_address]
+        [r.name, r.branch, r.mobile, r.session, r.timestamp.toISOString(), r.distance_m, r.device_id, r.ip_address]
           .map(esc)
           .join(',')
       ),
@@ -542,7 +547,7 @@ app.get('/api/admin/devices', requireAdmin, async (req, res, next) => {
     const date = req.query.date || todayStr();
     const rows = (
       await pool.query(
-        `SELECT device_id, session, roll_number, marked_at
+        `SELECT device_id, session, mobile, marked_at
          FROM device_limits WHERE date = $1 ORDER BY marked_at`,
         [date]
       )

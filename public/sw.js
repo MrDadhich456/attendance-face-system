@@ -1,4 +1,4 @@
-const CACHE = 'face-attendance-v3';
+const CACHE = 'face-attendance-v4';
 const APP_FILES = ['/', '/index.html', '/admin.html'];
 
 self.addEventListener('install', event => {
@@ -17,6 +17,21 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   // Never cache API writes: attendance must always reach the server.
   if (request.method !== 'GET' || new URL(request.url).pathname.startsWith('/api/')) return;
+
+  // Always load the newest app page after a deployment. The cache is only an
+  // offline fallback; cache-first here would keep an old check-in script alive.
+  if (request.mode === 'navigate' || APP_FILES.includes(new URL(request.url).pathname)) {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          if (response.ok) caches.open(CACHE).then(cache => cache.put(request, response.clone()));
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(request).then(cached => {
       const network = fetch(request).then(response => {

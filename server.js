@@ -327,12 +327,6 @@ app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
     if (!deviceIdClean) {
       return res.status(400).json({ ok: false, error: 'Device identification required. Clear cache and retry.' });
     }
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Location is required to mark attendance. Allow location access and try again.',
-      });
-    }
 
     // Session check
     const venue = await getSettings();
@@ -345,14 +339,18 @@ app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
       });
     }
 
-    // Geofence check
-    const dist = distanceMeters(lat, lng, venue.venue_lat, venue.venue_lng);
-    if (dist > venue.radius_m) {
-      return res.status(403).json({
-        ok: false,
-        reason: 'outside_venue',
-        error: `You are ${Math.round(dist)}m away from the venue. Must be within ${venue.radius_m}m.`,
-      });
+    // Geofence check (enforced whenever location coordinates are available)
+    let dist = null;
+    const hasLocation = Number.isFinite(lat) && Number.isFinite(lng);
+    if (hasLocation) {
+      dist = distanceMeters(lat, lng, venue.venue_lat, venue.venue_lng);
+      if (dist > venue.radius_m) {
+        return res.status(403).json({
+          ok: false,
+          reason: 'outside_venue',
+          error: `You are ${Math.round(dist)}m away from the venue. Must be within ${venue.radius_m}m.`,
+        });
+      }
     }
 
     const date = todayStr();
@@ -399,8 +397,9 @@ app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
          VALUES ($1,$2,$3,$4,$5,NOW(),$6,$7,$8,$9,$10,$11)`,
         [
           name, branch, mobileClean, date, session,
-          lat, lng,
-          Number.isFinite(accuracy) ? accuracy : null,
+          hasLocation ? lat : null,
+          hasLocation ? lng : null,
+          hasLocation && Number.isFinite(accuracy) ? accuracy : null,
           dist, deviceIdClean, ipAddress,
         ]
       );

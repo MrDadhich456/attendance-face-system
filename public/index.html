@@ -154,7 +154,7 @@
     text-transform: uppercase;
     letter-spacing: 0.07em;
   }
-  input[type=text], select {
+  input[type=text], input[type=tel], input, select {
     width: 100%;
     padding: 13px 14px;
     border-radius: 12px;
@@ -517,7 +517,7 @@
     const branch = branchSelect.value;
     const mobile = mobileInput.value.replace(/\D/g, '');
 
-    const valid = name.length >= 2 && branch && isValidMobile(mobile) && lastPosition && sessionOpen && !cooldownActive;
+    const valid = name.length >= 2 && branch && isValidMobile(mobile) && sessionOpen && !cooldownActive;
     submitBtn.disabled = !valid || isSubmitting;
     return valid;
   }
@@ -567,7 +567,7 @@
 
   async function getLocation() {
     if (!navigator.geolocation) {
-      throw new Error('Browser does not support location services.');
+      return null;
     }
 
     // Reuse a recent position
@@ -576,34 +576,27 @@
     }
 
     try {
-      return await requestLocation({ enableHighAccuracy: true, timeout: 30000, maximumAge: 120000 });
+      return await requestLocation({ enableHighAccuracy: true, timeout: 10000, maximumAge: 120000 });
     } catch (highAccuracyError) {
       try {
-        return await requestLocation({ enableHighAccuracy: false, timeout: 15000, maximumAge: 10 * 60 * 1000 });
+        return await requestLocation({ enableHighAccuracy: false, timeout: 8000, maximumAge: 10 * 60 * 1000 });
       } catch (fallbackError) {
-        const err = fallbackError.code ? fallbackError : highAccuracyError;
-        let message = 'Could not get location. Please try again.';
-        if (err.code === 1) message = 'Location permission denied. Please allow location access and try again.';
-        if (err.code === 2) message = 'Location unavailable. Turn on Location Services and try again.';
-        if (err.code === 3) message = 'Location is taking too long. Move near a window or open area, then try again.';
-        locDot.className = 'loc-dot failed';
-        locText.textContent = message;
-        throw new Error(message);
+        return null;
       }
     }
   }
 
   function startLocationAcquisition() {
     if (!navigator.geolocation) {
-      locDot.className = 'loc-dot failed';
-      locText.textContent = 'Location not supported';
+      locDot.className = 'loc-dot acquiring';
+      locText.textContent = 'Location optional — Ready to mark attendance';
       return;
     }
     navigator.geolocation.getCurrentPosition(
       rememberPosition,
       () => {
-        locDot.className = 'loc-dot failed';
-        locText.textContent = 'Location unavailable — tap to retry';
+        locDot.className = 'loc-dot acquiring';
+        locText.textContent = 'Location optional (browser HTTP) — Check-in enabled';
         locStatus.style.cursor = 'pointer';
         locStatus.onclick = () => {
           locDot.className = 'loc-dot acquiring';
@@ -613,7 +606,7 @@
           startLocationAcquisition();
         };
       },
-      { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
     );
   }
 
@@ -665,16 +658,21 @@
     resultCard.classList.remove('show');
 
     try {
-      // Ensure we have fresh-enough location
-      const coords = await getLocation();
+      // Try to acquire location (if supported by browser/HTTP)
+      let coords = null;
+      try {
+        coords = await getLocation();
+      } catch (locErr) {
+        console.warn('Geolocation omitted:', locErr);
+      }
 
       const payload = {
         name,
         branch,
         mobile,
-        lat: coords.latitude,
-        lng: coords.longitude,
-        accuracy: coords.accuracy,
+        lat: coords ? coords.latitude : null,
+        lng: coords ? coords.longitude : null,
+        accuracy: coords ? coords.accuracy : null,
         deviceId,
       };
 

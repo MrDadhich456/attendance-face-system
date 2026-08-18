@@ -174,6 +174,22 @@ function getClientIP(req) {
 // ---------------------------------------------------------------------------
 
 async function initializeDatabase() {
+  // --- Migration: drop old incompatible tables from v1 (face recognition) ---
+  // The old 'students' table stored face descriptors and is no longer needed.
+  // The old 'attendance' table had columns (student_id, mobile, match_confidence)
+  // that don't exist in v2, and lacked roll_number/device_id/ip_address.
+  // We detect the old schema by checking for columns that no longer exist.
+  const oldSchemaCheck = await pool.query(`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_name = 'attendance' AND column_name = 'student_id'
+  `);
+  if (oldSchemaCheck.rows.length > 0) {
+    console.log('Detected old v1 schema — migrating to v2...');
+    await pool.query('DROP TABLE IF EXISTS attendance CASCADE');
+    await pool.query('DROP TABLE IF EXISTS students CASCADE');
+    console.log('Old tables dropped. Recreating with new schema...');
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),

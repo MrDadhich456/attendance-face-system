@@ -2,6 +2,7 @@ const express = require('express');
 const { Pool } = require('pg');
 const path = require('path');
 const fs = require('fs');
+const rateLimit = require('express-rate-limit');
 
 // Auto-load .env file if available
 const envPath = path.join(__dirname, '.env');
@@ -22,7 +23,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme123';
 const DATABASE_URL = process.env.DATABASE_URL;
-const FACE_MATCH_THRESHOLD = parseFloat(process.env.FACE_MATCH_THRESHOLD || '0.6');
 
 if (process.env.NODE_ENV === 'production' && !process.env.ADMIN_PASSWORD) {
   throw new Error('ADMIN_PASSWORD must be set when running in production.');
@@ -31,14 +31,54 @@ if (!DATABASE_URL) {
   throw new Error('DATABASE_URL must be set to a PostgreSQL connection URL in process environment or .env file.');
 }
 
+// ---------------------------------------------------------------------------
+// PostgreSQL connection pool — tuned for ~250 concurrent users
+// ---------------------------------------------------------------------------
+
 const pool = new Pool({
   connectionString: DATABASE_URL,
   ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+  max: 20,                   // max connections in pool
+  idleTimeoutMillis: 30000,  // close idle clients after 30s
+  connectionTimeoutMillis: 5000, // fail fast if pool exhausted
 });
 
-// Increased limit for base64 photo uploads
-app.use(express.json({ limit: '10mb' }));
+// No more base64 photos — keep a small JSON limit
+app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ---------------------------------------------------------------------------
+// Rate limiting — prevent abuse on check-in endpoint
+// ---------------------------------------------------------------------------
+
+const checkinLimiter = rateLimit({
+  windowMs: 60 * 1000,   // 1 minute
+  max: 5,                // 5 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: 'Too many requests. Please wait a minute before trying again.' },
+});
+
+// Global rate limit — lighter, protects all routes
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: 'Too many requests. Please slow down.' },
+});
+
+app.use(globalLimiter);
+
+// ---------------------------------------------------------------------------
+// Request timeout middleware
+// ---------------------------------------------------------------------------
+
+app.use((req, res, next) => {
+  req.setTimeout(30000);
+  res.setTimeout(30000);
+  next();
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -102,12 +142,13 @@ function sessionLabel(session) {
   return session === 'morning' ? 'Before lunch' : 'After lunch';
 }
 
-function normalizeMobile(mobile) {
-  return String(mobile || '').replace(/\D/g, '');
+function sanitize(val) {
+  return typeof val === 'string' ? val.trim().replace(/\s+/g, ' ') : '';
 }
 
-function isValidMobile(mobile) {
-  return /^\d{10}$/.test(normalizeMobile(mobile));
+function isValidRollNumber(roll) {
+  // Accept alphanumeric roll numbers, 3-30 chars
+  return /^[A-Za-z0-9\-\/]{3,30}$/.test(roll);
 }
 
 async function getSettings() {
@@ -121,47 +162,11 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// ---------------------------------------------------------------------------
-// Face matching — Euclidean distance on 128-dim descriptors
-// ---------------------------------------------------------------------------
-
-function euclideanDistance(a, b) {
-  if (!a || !b || a.length !== b.length) return Infinity;
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) {
-    sum += (a[i] - b[i]) ** 2;
-  }
-  return Math.sqrt(sum);
-}
-
-async function findBestMatch(descriptor) {
-  const { rows } = await pool.query(
-    'SELECT id, name, branch, mobile, email, face_descriptor, photo FROM students'
-  );
-  let best = null;
-  let bestDist = Infinity;
-  for (const row of rows) {
-    const dist = euclideanDistance(descriptor, row.face_descriptor);
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = row;
-    }
-  }
-  if (best && bestDist <= FACE_MATCH_THRESHOLD) {
-    return {
-      student: {
-        id: best.id,
-        name: best.name,
-        branch: best.branch,
-        mobile: best.mobile,
-        email: best.email,
-        photo: best.photo,
-      },
-      distance: bestDist,
-      confidence: Math.max(0, Math.round((1 - bestDist / FACE_MATCH_THRESHOLD) * 100)),
-    };
-  }
-  return null;
+function getClientIP(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+         req.connection?.remoteAddress ||
+         req.ip ||
+         'unknown';
 }
 
 // ---------------------------------------------------------------------------
@@ -182,40 +187,35 @@ async function initializeDatabase() {
       venue_label TEXT DEFAULT 'Induction Venue'
     );
 
-    CREATE TABLE IF NOT EXISTS students (
-      id BIGSERIAL PRIMARY KEY,
-      name TEXT NOT NULL,
-      branch TEXT NOT NULL,
-      mobile TEXT NOT NULL UNIQUE,
-      email TEXT,
-      photo TEXT,
-      face_descriptor DOUBLE PRECISION[] NOT NULL,
-      registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
     CREATE TABLE IF NOT EXISTS attendance (
       id BIGSERIAL PRIMARY KEY,
-      student_id BIGINT REFERENCES students(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       branch TEXT NOT NULL,
-      mobile TEXT NOT NULL,
+      roll_number TEXT NOT NULL,
       date TEXT NOT NULL,
-      timestamp TIMESTAMPTZ NOT NULL,
+      session TEXT NOT NULL DEFAULT 'morning',
+      timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       lat DOUBLE PRECISION,
       lng DOUBLE PRECISION,
       accuracy DOUBLE PRECISION,
       distance_m DOUBLE PRECISION,
-      device_id TEXT,
-      session TEXT NOT NULL DEFAULT 'morning',
-      match_confidence DOUBLE PRECISION
+      device_id TEXT NOT NULL,
+      ip_address TEXT
     );
 
-    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS student_id BIGINT REFERENCES students(id) ON DELETE CASCADE;
-    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS match_confidence DOUBLE PRECISION;
+    CREATE TABLE IF NOT EXISTS device_limits (
+      device_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      session TEXT NOT NULL,
+      roll_number TEXT NOT NULL,
+      marked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (device_id, date, session)
+    );
 
     CREATE INDEX IF NOT EXISTS idx_att_date ON attendance(date);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_att_student_date_session
-      ON attendance(student_id, date, session);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_att_roll_date_session
+      ON attendance(roll_number, date, session);
+    CREATE INDEX IF NOT EXISTS idx_device_limits_date ON device_limits(date);
   `);
 
   await pool.query(`
@@ -231,12 +231,11 @@ async function initializeDatabase() {
 // Public API
 // ---------------------------------------------------------------------------
 
-// Status — venue info, session, registered count
+// Status — venue info and session window
 app.get('/api/status', async (req, res, next) => {
   try {
     const venue = await getSettings();
     const session = activeSession(venue);
-    const studentCount = (await pool.query('SELECT COUNT(*) FROM students')).rows[0].count;
     res.json({
       ok: true,
       date: todayStr(),
@@ -252,206 +251,162 @@ app.get('/api/status', async (req, res, next) => {
         label: session ? sessionLabel(session) : null,
         message: `Attendance: ${venue.morning_start}–${venue.morning_end} (before lunch) · ${venue.afternoon_start}–${venue.afternoon_end} (after lunch).`,
       },
-      registeredStudents: parseInt(studentCount, 10),
     });
   } catch (err) {
     next(err);
   }
 });
 
-// Register — save face + student details
-app.post('/api/register', async (req, res, next) => {
+// Check-in — the single attendance endpoint
+app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
   try {
-    let { name, branch, mobile, email, photo, descriptor, lat, lng, accuracy } =
-      req.body || {};
-    name = typeof name === 'string' ? name.trim() : '';
-    branch = typeof branch === 'string' ? branch.trim() : '';
-    email = typeof email === 'string' ? email.trim() : '';
-    const mobileDigits = normalizeMobile(mobile);
+    let { name, branch, rollNumber, lat, lng, accuracy, deviceId } = req.body || {};
 
-    if (!name || !branch || !mobileDigits) {
-      return res
-        .status(400)
-        .json({ ok: false, error: 'Name, branch, and mobile number are required.' });
+    // Sanitize & validate
+    name = sanitize(name);
+    branch = sanitize(branch);
+    rollNumber = sanitize(rollNumber).toUpperCase();
+    const deviceIdClean = sanitize(deviceId);
+    const ipAddress = getClientIP(req);
+
+    if (!name || name.length < 2 || name.length > 100) {
+      return res.status(400).json({ ok: false, error: 'Enter your full name (2–100 characters).' });
     }
-    if (!isValidMobile(mobileDigits)) {
-      return res
-        .status(400)
-        .json({ ok: false, error: 'Enter a valid 10-digit mobile number.' });
+    if (!branch) {
+      return res.status(400).json({ ok: false, error: 'Select your branch.' });
     }
-    if (!descriptor || !Array.isArray(descriptor) || descriptor.length !== 128) {
+    if (!rollNumber || !isValidRollNumber(rollNumber)) {
       return res.status(400).json({
         ok: false,
-        error: 'A valid face scan is required. Ensure your face is clearly visible.',
+        error: 'Enter a valid roll number (3–30 alphanumeric characters).',
       });
     }
-    if (!photo || typeof photo !== 'string') {
-      return res.status(400).json({ ok: false, error: 'Photo capture is required.' });
-    }
-
-    // Reject if face already matches an existing student
-    const existingMatch = await findBestMatch(descriptor);
-    if (existingMatch) {
-      // A weak connection can lose the success response. Treat a retry for the
-      // same mobile and face as success, so one registration attempt is safe.
-      if (existingMatch.student.mobile === mobileDigits) {
-        return res.json({
-          ok: true,
-          alreadyRegistered: true,
-          message: `${name} is already registered. You can now check in with your face.`,
-        });
-      }
-      return res.status(409).json({
-        ok: false,
-        error: `This face is already registered under "${existingMatch.student.name}" (${existingMatch.student.branch}). Contact admin if this is wrong.`,
-      });
-    }
-
-    // Geofence check (if location provided)
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      const venue = await getSettings();
-      const dist = distanceMeters(lat, lng, venue.venue_lat, venue.venue_lng);
-      if (dist > venue.radius_m) {
-        return res.status(403).json({
-          ok: false,
-          error: `You are ${Math.round(dist)}m from the venue. Registration must be done within ${venue.radius_m}m.`,
-        });
-      }
-    }
-
-    try {
-      await pool.query(
-        `INSERT INTO students (name, branch, mobile, email, photo, face_descriptor)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [name, branch, mobileDigits, email || null, photo, descriptor]
-      );
-    } catch (err) {
-      if (err.code === '23505') {
-        const saved = (await pool.query(
-          'SELECT name, face_descriptor FROM students WHERE mobile = $1',
-          [mobileDigits]
-        )).rows[0];
-        if (saved && euclideanDistance(descriptor, saved.face_descriptor) <= FACE_MATCH_THRESHOLD) {
-          return res.json({
-            ok: true,
-            alreadyRegistered: true,
-            message: `${saved.name} is already registered. You can now check in with your face.`,
-          });
-        }
-        return res
-          .status(409)
-          .json({ ok: false, error: 'This mobile number is already registered.' });
-      }
-      throw err;
-    }
-
-    res.json({
-      ok: true,
-      message: `${name} registered successfully! You can now check in with your face.`,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Recognise — match face → mark attendance
-app.post('/api/recognize', async (req, res, next) => {
-  try {
-    const { descriptor, lat, lng, accuracy, deviceId } = req.body || {};
-
-    if (!descriptor || !Array.isArray(descriptor) || descriptor.length !== 128) {
-      return res
-        .status(400)
-        .json({ ok: false, error: 'A valid face scan is required.' });
+    if (!deviceIdClean) {
+      return res.status(400).json({ ok: false, error: 'Device identification required. Clear cache and retry.' });
     }
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return res
-        .status(400)
-        .json({ ok: false, error: 'Location is required to mark attendance.' });
-    }
-
-    // Match
-    const match = await findBestMatch(descriptor);
-    if (!match) {
-      return res.status(404).json({
+      return res.status(400).json({
         ok: false,
-        error: "Face not recognised. If you haven't registered yet, switch to the Register tab first.",
-      });
-    }
-
-    // Geofence
-    const venue = await getSettings();
-    const dist = distanceMeters(lat, lng, venue.venue_lat, venue.venue_lng);
-    if (dist > venue.radius_m) {
-      return res.status(403).json({
-        ok: false,
-        reason: 'outside_venue',
-        error: `You are ${Math.round(dist)}m away. Must be within ${venue.radius_m}m of the venue.`,
-        student: { name: match.student.name, branch: match.student.branch },
+        error: 'Location is required to mark attendance. Allow location access and try again.',
       });
     }
 
     // Session check
+    const venue = await getSettings();
     const session = activeSession(venue);
     if (!session) {
       return res.status(403).json({
         ok: false,
         reason: 'attendance_closed',
-        error: `Attendance is closed. Windows: ${venue.morning_start}–${venue.morning_end} and ${venue.afternoon_start}–${venue.afternoon_end}.`,
-        student: { name: match.student.name, branch: match.student.branch },
+        error: `Attendance is closed right now. Windows: ${venue.morning_start}–${venue.morning_end} and ${venue.afternoon_start}–${venue.afternoon_end}.`,
+      });
+    }
+
+    // Geofence check
+    const dist = distanceMeters(lat, lng, venue.venue_lat, venue.venue_lng);
+    if (dist > venue.radius_m) {
+      return res.status(403).json({
+        ok: false,
+        reason: 'outside_venue',
+        error: `You are ${Math.round(dist)}m away from the venue. Must be within ${venue.radius_m}m.`,
       });
     }
 
     const date = todayStr();
 
+    // --- Transactional insert with SERIALIZABLE isolation ---
+    // This prevents race conditions when 250+ students hit the endpoint simultaneously
+    const client = await pool.connect();
     try {
-      await pool.query(
-        `INSERT INTO attendance
-           (student_id, name, branch, mobile, date, timestamp,
-            lat, lng, accuracy, distance_m, device_id, session, match_confidence)
-         VALUES ($1,$2,$3,$4,$5,NOW(),$6,$7,$8,$9,$10,$11,$12)`,
-        [
-          match.student.id,
-          match.student.name,
-          match.student.branch,
-          match.student.mobile,
-          date,
-          lat,
-          lng,
-          Number.isFinite(accuracy) ? accuracy : null,
-          dist,
-          deviceId || null,
-          session,
-          match.confidence,
-        ]
+      await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+
+      // Check 1: Has this device already marked attendance in this session today?
+      const deviceCheck = await client.query(
+        'SELECT roll_number FROM device_limits WHERE device_id = $1 AND date = $2 AND session = $3',
+        [deviceIdClean, date, session]
       );
-    } catch (err) {
-      if (err.code === '23505') {
+      if (deviceCheck.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          ok: false,
+          reason: 'device_limit',
+          error: `This device has already been used to mark ${sessionLabel(session)} attendance today. One device can only mark attendance once per session.`,
+        });
+      }
+
+      // Check 2: Has this roll number already been marked for this session?
+      const rollCheck = await client.query(
+        'SELECT id FROM attendance WHERE roll_number = $1 AND date = $2 AND session = $3',
+        [rollNumber, date, session]
+      );
+      if (rollCheck.rows.length > 0) {
+        await client.query('ROLLBACK');
         return res.status(409).json({
           ok: false,
           reason: 'already_marked',
-          error: `${sessionLabel(session)} attendance already marked today.`,
-          student: {
-            name: match.student.name,
-            branch: match.student.branch,
-            photo: match.student.photo,
-          },
+          error: `${sessionLabel(session)} attendance for roll number ${rollNumber} is already marked today.`,
         });
       }
-      throw err;
-    }
 
-    res.json({
-      ok: true,
-      message: `${sessionLabel(session)} attendance marked!`,
-      student: {
-        name: match.student.name,
-        branch: match.student.branch,
-        photo: match.student.photo,
-      },
-      confidence: match.confidence,
-      distance: Math.round(dist),
-    });
+      // Insert attendance record
+      await client.query(
+        `INSERT INTO attendance
+           (name, branch, roll_number, date, session, timestamp,
+            lat, lng, accuracy, distance_m, device_id, ip_address)
+         VALUES ($1,$2,$3,$4,$5,NOW(),$6,$7,$8,$9,$10,$11)`,
+        [
+          name, branch, rollNumber, date, session,
+          lat, lng,
+          Number.isFinite(accuracy) ? accuracy : null,
+          dist, deviceIdClean, ipAddress,
+        ]
+      );
+
+      // Insert device limit record
+      await client.query(
+        `INSERT INTO device_limits (device_id, date, session, roll_number)
+         VALUES ($1, $2, $3, $4)`,
+        [deviceIdClean, date, session, rollNumber]
+      );
+
+      await client.query('COMMIT');
+
+      res.json({
+        ok: true,
+        message: `${sessionLabel(session)} attendance marked successfully!`,
+        student: { name, branch, rollNumber },
+        distance: Math.round(dist),
+      });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+
+      // Handle serialization failure (concurrent transaction conflict)
+      // Error code 40001 = serialization_failure
+      if (txErr.code === '40001') {
+        return res.status(409).json({
+          ok: false,
+          error: 'Server is busy. Please tap the button again in a moment.',
+        });
+      }
+      // Handle unique constraint violations (belt-and-suspenders with the checks above)
+      if (txErr.code === '23505') {
+        if (txErr.constraint?.includes('device')) {
+          return res.status(409).json({
+            ok: false,
+            reason: 'device_limit',
+            error: `This device has already been used to mark ${sessionLabel(session)} attendance today.`,
+          });
+        }
+        return res.status(409).json({
+          ok: false,
+          reason: 'already_marked',
+          error: `${sessionLabel(session)} attendance for roll number ${rollNumber} is already marked today.`,
+        });
+      }
+      throw txErr;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     next(err);
   }
@@ -508,11 +463,10 @@ app.get('/api/admin/attendance', requireAdmin, async (req, res, next) => {
     const date = req.query.date || todayStr();
     const rows = (
       await pool.query(
-        `SELECT a.id, a.student_id, a.name, a.branch, a.mobile, a.session,
-                a.timestamp, a.distance_m, a.match_confidence, s.photo
-         FROM attendance a
-         LEFT JOIN students s ON a.student_id = s.id
-         WHERE a.date = $1 ORDER BY a.timestamp`,
+        `SELECT id, name, branch, roll_number, session,
+                timestamp, distance_m, device_id, ip_address
+         FROM attendance
+         WHERE date = $1 ORDER BY timestamp`,
         [date]
       )
     ).rows;
@@ -528,34 +482,10 @@ app.get('/api/admin/attendance', requireAdmin, async (req, res, next) => {
   }
 });
 
-app.get('/api/admin/students', requireAdmin, async (req, res, next) => {
-  try {
-    const rows = (
-      await pool.query(
-        `SELECT id, name, branch, mobile, email, photo, registered_at
-         FROM students ORDER BY registered_at DESC`
-      )
-    ).rows;
-    res.json({ ok: true, students: rows, count: rows.length });
-  } catch (err) {
-    next(err);
-  }
-});
-
 app.delete('/api/admin/attendance/:id', requireAdmin, async (req, res, next) => {
   try {
     const result = await pool.query('DELETE FROM attendance WHERE id = $1', [req.params.id]);
     if (!result.rowCount) return res.status(404).json({ ok: false, error: 'Record not found.' });
-    res.json({ ok: true });
-  } catch (err) {
-    next(err);
-  }
-});
-
-app.delete('/api/admin/students/:id', requireAdmin, async (req, res, next) => {
-  try {
-    const result = await pool.query('DELETE FROM students WHERE id = $1', [req.params.id]);
-    if (!result.rowCount) return res.status(404).json({ ok: false, error: 'Student not found.' });
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -567,17 +497,17 @@ app.get('/api/admin/attendance/export', requireAdmin, async (req, res, next) => 
     const date = req.query.date || todayStr();
     const rows = (
       await pool.query(
-        `SELECT name, branch, mobile, session, timestamp,
-                ROUND(distance_m::numeric, 1) AS distance_m, match_confidence
+        `SELECT name, branch, roll_number, session, timestamp,
+                ROUND(distance_m::numeric, 1) AS distance_m, device_id, ip_address
          FROM attendance WHERE date = $1 ORDER BY timestamp`,
         [date]
       )
     ).rows;
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = [
-      'name,branch,mobile,session,timestamp,distance_m,match_confidence',
+      'name,branch,roll_number,session,timestamp,distance_m,device_id,ip_address',
       ...rows.map((r) =>
-        [r.name, r.branch, r.mobile, r.session, r.timestamp.toISOString(), r.distance_m, r.match_confidence]
+        [r.name, r.branch, r.roll_number, r.session, r.timestamp.toISOString(), r.distance_m, r.device_id, r.ip_address]
           .map(esc)
           .join(',')
       ),
@@ -585,6 +515,23 @@ app.get('/api/admin/attendance/export', requireAdmin, async (req, res, next) => 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="attendance_${date}.csv"`);
     res.send(csv);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Admin: view device usage for a date (debug/audit endpoint)
+app.get('/api/admin/devices', requireAdmin, async (req, res, next) => {
+  try {
+    const date = req.query.date || todayStr();
+    const rows = (
+      await pool.query(
+        `SELECT device_id, session, roll_number, marked_at
+         FROM device_limits WHERE date = $1 ORDER BY marked_at`,
+        [date]
+      )
+    ).rows;
+    res.json({ ok: true, date, devices: rows, count: rows.length });
   } catch (err) {
     next(err);
   }
@@ -606,7 +553,7 @@ app.use((err, _req, res, _next) => {
 initializeDatabase()
   .then(() =>
     app.listen(PORT, () =>
-      console.log(`Face attendance server running on http://localhost:${PORT}`)
+      console.log(`Attendance server running on http://localhost:${PORT}`)
     )
   )
   .catch((err) => {

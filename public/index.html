@@ -3,9 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-<title>Induction Face Check-In</title>
-<!-- Bundled locally so face detection does not depend on a CDN connection. -->
-<script defer src="/vendor/face-api/face-api.js"></script>
+<title>Induction Attendance Check-In</title>
+<meta name="description" content="Mark your induction attendance — enter your name, branch, and roll number." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
 <style>
   :root {
     --navy: #050a17;
@@ -19,13 +21,14 @@
     --good: #4ee2a8;
     --bad: #ff8989;
     --warn: #fbc660;
+    --info-bg: rgba(63, 101, 205, .16);
+    --info-border: rgba(113, 148, 255, .24);
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    margin: 0;
     min-height: 100vh;
     color: var(--ink);
-    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -54,6 +57,7 @@
     right: -150px; bottom: -200px;
     background: radial-gradient(circle, rgba(142, 86, 255, .28) 0, rgba(158,98,255,0) 70%);
   }
+
   .card {
     width: 100%;
     max-width: 480px;
@@ -61,7 +65,7 @@
     backdrop-filter: blur(20px) saturate(130%);
     border: 1px solid rgba(159, 181, 255, .18);
     border-radius: 28px;
-    padding: 28px 24px;
+    padding: 32px 24px;
     box-shadow: 0 28px 70px rgba(0, 0, 0, .48), inset 0 1px 0 rgba(255, 255, 255, .04);
     position: relative;
     overflow: hidden;
@@ -73,6 +77,7 @@
     left: 0; right: 0; top: 0;
     background: linear-gradient(90deg, var(--aqua), var(--blue), var(--violet));
   }
+
   .eyebrow {
     font-size: 11px;
     letter-spacing: 0.18em;
@@ -91,102 +96,73 @@
     background: var(--aqua);
     border-radius: 8px;
   }
-  h1 { font-size: 26px; line-height: 1.1; margin: 0 0 6px; letter-spacing: -0.04em; }
-  .venue { font-size: 13px; color: var(--muted); margin-bottom: 18px; font-weight: 600; }
 
-  /* Mode Switcher Tabs */
-  .tabs {
-    display: flex;
-    background: #090f20;
-    border: 1px solid rgba(155, 177, 238, .13);
-    border-radius: 14px;
-    padding: 4px;
-    margin-bottom: 20px;
-    gap: 4px;
+  h1 {
+    font-size: 26px;
+    line-height: 1.1;
+    margin: 0 0 6px;
+    letter-spacing: -0.04em;
+    font-weight: 900;
   }
-  .tab-btn {
-    flex: 1;
-    padding: 10px;
-    border: none;
-    border-radius: 10px;
-    background: transparent;
+  .venue {
+    font-size: 13px;
     color: var(--muted);
-    font-size: 13.5px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-align: center;
-  }
-  .tab-btn.active {
-    background: linear-gradient(135deg, #273b78, #41307e);
-    color: #fff;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, .24);
-  }
-
-  /* Camera Container */
-  .camera-box {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 4/3;
-    background: #030712;
-    border: 1px solid rgba(165, 184, 255, .18);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .03);
-    border-radius: 18px;
-    overflow: hidden;
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transform: scaleX(-1); /* mirror preview */
-  }
-  canvas {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-    transform: scaleX(-1);
-  }
-  .face-overlay-guide {
-    position: absolute;
-    width: 55%;
-    height: 70%;
-    border: 2px dashed rgba(255, 255, 255, 0.6);
-    border-radius: 50%;
-    pointer-events: none;
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
-    transition: border-color 0.3s;
-  }
-  .camera-box.ready .face-overlay-guide { border-color: var(--aqua); }
-  .camera-box.matched .face-overlay-guide { border-color: var(--good); }
-  .camera-status {
-    position: absolute;
-    bottom: 10px;
-    left: 10px; right: 10px;
-    background: rgba(5, 10, 23, 0.82);
-    backdrop-filter: blur(6px);
-    color: #fff;
-    font-size: 12px;
-    padding: 8px 12px;
-    border-radius: 10px;
-    text-align: center;
+    margin-bottom: 8px;
     font-weight: 600;
   }
 
-  label { display: block; font-size: 11px; font-weight: 800; color: var(--muted); margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.07em; }
-  .field { margin-bottom: 14px; }
-  input[type=text], input[type=tel], input[type=email], select {
+  /* Session badge */
+  .session-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 20px;
+  }
+  .session-badge.open {
+    background: rgba(78, 226, 168, .14);
+    color: var(--good);
+    border: 1px solid rgba(78, 226, 168, .3);
+  }
+  .session-badge.closed {
+    background: rgba(255, 137, 137, .14);
+    color: var(--bad);
+    border: 1px solid rgba(255, 137, 137, .3);
+  }
+  .session-badge .pulse {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--good);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  /* Form */
+  .field { margin-bottom: 16px; }
+  label {
+    display: block;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--muted);
+    margin: 0 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+  input[type=text], select {
     width: 100%;
-    padding: 12px 14px;
+    padding: 13px 14px;
     border-radius: 12px;
     border: 1.5px solid var(--line);
     font-size: 15px;
+    font-family: inherit;
     outline: none;
-    transition: .18s;
+    transition: border-color .18s, box-shadow .18s, background .18s;
     background: rgba(7, 14, 30, .82);
     color: var(--ink);
     -webkit-appearance: none;
@@ -201,121 +177,216 @@
     cursor: pointer;
   }
   input::placeholder { color: #71809d; }
-  input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(113,148,255,.15); background: #0c1730; }
+  input:focus, select:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 4px rgba(113,148,255,.15);
+    background: #0c1730;
+  }
+  input.invalid { border-color: var(--bad); }
+  input.valid { border-color: var(--good); }
   select option { background: #0d1730; color: var(--ink); }
-  .optional { font-weight: 500; color: #8390ad; text-transform: none; }
 
+  /* Validation hint */
+  .hint {
+    font-size: 11px;
+    color: #8390ad;
+    margin-top: 4px;
+    display: none;
+  }
+  .hint.show { display: block; }
+  .hint.error { color: var(--bad); }
+
+  /* Submit button */
   button.action-btn {
     width: 100%;
-    padding: 14px;
+    padding: 15px;
     border: 0;
     border-radius: 14px;
     background: linear-gradient(100deg, #527cff, #9a68f5);
     color: white;
     font-size: 15px;
     font-weight: 800;
+    font-family: inherit;
     letter-spacing: .02em;
     cursor: pointer;
-    transition: .2s;
+    transition: transform .2s, filter .2s, box-shadow .2s;
     margin-top: 6px;
     box-shadow: 0 10px 24px rgba(66, 86, 229, .28);
+    position: relative;
+    overflow: hidden;
   }
-  button.action-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
-  button.action-btn:active { transform: scale(0.98); }
-  button.action-btn:disabled { background: #26334d; color: #7d8aa5; cursor: not-allowed; transform: none; box-shadow: none; }
+  button.action-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.05);
+  }
+  button.action-btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  button.action-btn:disabled {
+    background: #26334d;
+    color: #7d8aa5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
 
+  /* Loading spinner in button */
+  button.action-btn .spinner {
+    display: none;
+    width: 18px; height: 18px;
+    border: 2.5px solid rgba(255,255,255,.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  button.action-btn.loading .spinner { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Messages */
   .msg {
     margin-top: 14px;
-    padding: 12px 14px;
-    border-radius: 12px;
+    padding: 14px 16px;
+    border-radius: 14px;
     font-size: 13px;
-    line-height: 1.5;
+    line-height: 1.6;
     display: none;
+    animation: slideUp .3s ease;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   .msg.show { display: block; }
   .msg.good { background: rgba(32, 141, 103, .16); color: var(--good); border: 1px solid rgba(78,226,168,.26); }
   .msg.bad { background: rgba(192, 56, 72, .16); color: var(--bad); border: 1px solid rgba(255,137,137,.24); }
-  .msg.info { background: rgba(63, 101, 205, .16); color: #b6c8ff; border: 1px solid rgba(113,148,255,.24); }
+  .msg.info { background: var(--info-bg); color: #b6c8ff; border: 1px solid var(--info-border); }
 
-  /* Match Card Result */
-  .student-match-card {
+  /* Success result card */
+  .result-card {
     display: none;
-    align-items: center;
-    gap: 16px;
     background: rgba(35, 76, 122, .28);
     border: 1.5px solid rgba(105, 166, 255, .35);
     border-radius: 16px;
-    padding: 14px;
+    padding: 16px;
     margin-top: 14px;
+    animation: slideUp .3s ease;
   }
-  .student-match-card.show { display: flex; }
-  .student-match-card img {
-    width: 64px; height: 64px;
+  .result-card.show { display: block; }
+  .result-card .result-icon {
+    width: 52px; height: 52px;
     border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid var(--blue);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    margin: 0 auto 10px;
   }
-  .student-info h3 { margin: 0 0 4px; font-size: 16px; color: var(--ink); }
-  .student-info p { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; }
-  .confidence-tag {
+  .result-card .result-icon.success {
+    background: rgba(78, 226, 168, .16);
+    border: 2px solid rgba(78, 226, 168, .4);
+  }
+  .result-card .result-details {
+    text-align: center;
+  }
+  .result-card h3 {
+    font-size: 17px;
+    color: var(--ink);
+    margin-bottom: 4px;
+    font-weight: 800;
+  }
+  .result-card p {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 600;
+    margin: 2px 0;
+  }
+  .result-card .session-tag {
     display: inline-block;
-    margin-top: 4px;
+    margin-top: 8px;
     font-size: 11px;
     font-weight: 700;
     color: var(--good);
     background: rgba(36, 151, 108, .24);
-    padding: 2px 8px;
-    border-radius: 6px;
+    padding: 4px 12px;
+    border-radius: 8px;
   }
 
-  .fineprint { margin-top: 18px; font-size: 11px; color: #8f9db8; line-height: 1.5; text-align: center; }
-  .support { margin-top: 8px; font-size: 12px; color: var(--muted); text-align: center; }
-  .support a { color: var(--blue); font-weight: 800; text-decoration: none; }
+  .divider {
+    height: 1px;
+    background: rgba(159, 181, 255, .12);
+    margin: 18px 0;
+  }
+
+  .fineprint {
+    margin-top: 18px;
+    font-size: 11px;
+    color: #8f9db8;
+    line-height: 1.5;
+    text-align: center;
+  }
+  .support {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .support a {
+    color: var(--blue);
+    font-weight: 800;
+    text-decoration: none;
+  }
+
+  /* Location status */
+  .loc-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 14px;
+    padding: 8px 12px;
+    background: rgba(7, 14, 30, .6);
+    border-radius: 10px;
+    border: 1px solid rgba(159, 181, 255, .08);
+  }
+  .loc-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .loc-dot.acquiring { background: var(--warn); animation: pulse 1s ease-in-out infinite; }
+  .loc-dot.acquired { background: var(--good); }
+  .loc-dot.failed { background: var(--bad); }
 </style>
 </head>
 <body>
   <div class="card">
     <div class="eyebrow">Induction Attendance</div>
-    <h1>Face Recognition Check-In</h1>
+    <h1>Mark Your Attendance</h1>
     <div class="venue" id="venueLabel">Loading venue details…</div>
 
-    <!-- Mode Selector -->
-    <div class="tabs">
-      <button class="tab-btn active" id="tabCheckIn" onclick="switchMode('checkin')">📷 Check In</button>
-      <button class="tab-btn" id="tabRegister" onclick="switchMode('register')">👤 Register Face</button>
+    <div id="sessionBadge" class="session-badge closed">
+      <span>Loading session…</span>
     </div>
 
-    <!-- Camera Viewport -->
-    <div class="camera-box" id="cameraBox">
-      <video id="video" playsinline autoplay muted></video>
-      <canvas id="overlayCanvas"></canvas>
-      <div class="face-overlay-guide"></div>
-      <div class="camera-status" id="cameraStatus">Initializing AI models…</div>
+    <!-- Location Status -->
+    <div class="loc-status" id="locStatus">
+      <span class="loc-dot acquiring" id="locDot"></span>
+      <span id="locText">Acquiring location…</span>
     </div>
 
-    <!-- Check-In Mode View -->
-    <div id="checkInView">
-      <button class="action-btn" id="checkInBtn" disabled onclick="handleCheckIn()">Scan Face & Check In</button>
-      
-      <div class="student-match-card" id="matchCard">
-        <img id="matchPhoto" src="" alt="Student Photo" />
-        <div class="student-info">
-          <h3 id="matchName">Name</h3>
-          <p id="matchBranch">Branch</p>
-          <span class="confidence-tag" id="matchConfidence">Match 95%</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Register Mode View -->
-    <div id="registerView" style="display: none;">
+    <!-- Form -->
+    <form id="checkinForm" autocomplete="off">
       <div class="field">
-        <label for="regName">Full Name</label>
-        <input type="text" id="regName" placeholder="e.g. Aarav Sharma" autocomplete="off" />
+        <label for="studentName">Full Name</label>
+        <input type="text" id="studentName" placeholder="e.g. Aarav Sharma" maxlength="100" required />
       </div>
+
       <div class="field">
-        <label for="regBranch">Branch</label>
-        <select id="regBranch">
+        <label for="studentBranch">Branch</label>
+        <select id="studentBranch" required>
           <option value="" disabled selected>Select your branch</option>
           <option value="Computer Science & Engineering (IoT)">Computer Science & Engineering (IoT)</option>
           <option value="Information Technology">Information Technology</option>
@@ -325,49 +396,68 @@
           <option value="Mechanical Engineering">Mechanical Engineering</option>
         </select>
       </div>
+
       <div class="field">
-        <label for="regMobile">Mobile Number</label>
-        <input type="tel" id="regMobile" placeholder="10-digit mobile number" maxlength="10" inputmode="numeric" autocomplete="off" />
-      </div>
-      <div class="field">
-        <label for="regEmail">Email <span class="optional">(optional)</span></label>
-        <input type="email" id="regEmail" placeholder="you@example.com" autocomplete="off" />
+        <label for="studentRoll">Roll Number</label>
+        <input type="text" id="studentRoll" placeholder="e.g. 2024CSE001" maxlength="30" required />
+        <div class="hint" id="rollHint">3–30 alphanumeric characters</div>
       </div>
 
-      <button class="action-btn" id="registerBtn" disabled onclick="handleRegister()">Register Face & Save Details</button>
+      <button type="submit" class="action-btn" id="submitBtn" disabled>
+        <span class="spinner"></span>
+        <span class="btn-text">Mark Attendance</span>
+      </button>
+    </form>
+
+    <!-- Result card -->
+    <div class="result-card" id="resultCard">
+      <div class="result-icon success">✓</div>
+      <div class="result-details">
+        <h3 id="resultName">Name</h3>
+        <p id="resultBranch">Branch</p>
+        <p id="resultRoll">Roll Number</p>
+        <span class="session-tag" id="resultSession">Before lunch</span>
+        <p id="resultDist" style="margin-top: 6px; font-size: 11px; color: #8f9db8;"></p>
+      </div>
     </div>
 
     <div class="msg" id="msg"></div>
 
     <div class="fineprint">
-      Camera & location are used only during check-in/registration to verify attendance within the venue radius.
+      Location is used only during check-in to verify you are within the venue radius.<br/>
+      One device can mark attendance once per session (before lunch & after lunch).
     </div>
     <div class="support">Facing a problem? Contact us: <a href="https://wa.me/918387042627" target="_blank" rel="noopener noreferrer">8387042627</a></div>
   </div>
 
 <script>
-  let modelsLoaded = false;
-  let currentMode = 'checkin'; // 'checkin' | 'register'
-  let currentDescriptor = null;
-  let currentPhotoBase64 = null;
+  // ---------------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------------
   let lastPosition = null;
   let lastPositionAt = 0;
-  let detectionInProgress = false;
+  let isSubmitting = false;
+  let sessionOpen = false;
+  let cooldownActive = false;
 
-  const video = document.getElementById('video');
-  const canvas = document.getElementById('overlayCanvas');
-  const cameraBox = document.getElementById('cameraBox');
-  const cameraStatus = document.getElementById('cameraStatus');
-  const msg = document.getElementById('msg');
+  const form = document.getElementById('checkinForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const btnText = submitBtn.querySelector('.btn-text');
+  const msgEl = document.getElementById('msg');
+  const resultCard = document.getElementById('resultCard');
   const venueLabel = document.getElementById('venueLabel');
-  const checkInBtn = document.getElementById('checkInBtn');
-  const registerBtn = document.getElementById('registerBtn');
+  const sessionBadge = document.getElementById('sessionBadge');
+  const locStatus = document.getElementById('locStatus');
+  const locDot = document.getElementById('locDot');
+  const locText = document.getElementById('locText');
+  const nameInput = document.getElementById('studentName');
+  const branchSelect = document.getElementById('studentBranch');
+  const rollInput = document.getElementById('studentRoll');
+  const rollHint = document.getElementById('rollHint');
 
-  // Format mobile input
-  document.getElementById('regMobile').addEventListener('input', (e) => {
-    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
-  });
-
+  // ---------------------------------------------------------------------------
+  // Device ID — persistent fingerprint in localStorage
+  // ---------------------------------------------------------------------------
   function getDeviceId() {
     let id = localStorage.getItem('induction_device_id');
     if (!id) {
@@ -378,23 +468,16 @@
   }
   const deviceId = getDeviceId();
 
+  // ---------------------------------------------------------------------------
+  // Utilities
+  // ---------------------------------------------------------------------------
   function showMsg(text, type) {
-    msg.textContent = text;
-    msg.className = 'msg show ' + type;
+    msgEl.textContent = text;
+    msgEl.className = 'msg show ' + type;
   }
 
   function hideMsg() {
-    msg.className = 'msg';
-  }
-
-  function switchMode(mode) {
-    currentMode = mode;
-    document.getElementById('tabCheckIn').className = 'tab-btn' + (mode === 'checkin' ? ' active' : '');
-    document.getElementById('tabRegister').className = 'tab-btn' + (mode === 'register' ? ' active' : '');
-    document.getElementById('checkInView').style.display = mode === 'checkin' ? 'block' : 'none';
-    document.getElementById('registerView').style.display = mode === 'register' ? 'block' : 'none';
-    document.getElementById('matchCard').classList.remove('show');
-    hideMsg();
+    msgEl.className = 'msg';
   }
 
   async function fetchJson(url, options = {}, timeout = 15000) {
@@ -409,130 +492,59 @@
     }
   }
 
-  async function loadStatus() {
-    try {
-      const { data } = await fetchJson('/api/status', {}, 8000);
-      if (data.ok) {
-        venueLabel.textContent = `${data.venue.label} · within ${data.venue.radius}m`;
-        if (!data.window.open) {
-          showMsg(data.window.message, 'info');
-        } else {
-          showMsg(`${data.window.label} attendance is open. Registered students: ${data.registeredStudents}`, 'info');
-        }
-      }
-    } catch (e) {
-      venueLabel.textContent = 'Could not reach server.';
+  // ---------------------------------------------------------------------------
+  // Form validation
+  // ---------------------------------------------------------------------------
+  function isValidRoll(val) {
+    return /^[A-Za-z0-9\-\/]{3,30}$/.test(val);
+  }
+
+  function validateForm() {
+    const name = nameInput.value.trim();
+    const branch = branchSelect.value;
+    const roll = rollInput.value.trim();
+
+    const valid = name.length >= 2 && branch && isValidRoll(roll) && lastPosition && sessionOpen && !cooldownActive;
+    submitBtn.disabled = !valid || isSubmitting;
+    return valid;
+  }
+
+  // Live validation on roll number
+  rollInput.addEventListener('input', () => {
+    const val = rollInput.value.trim();
+    if (val.length === 0) {
+      rollInput.className = '';
+      rollHint.className = 'hint';
+    } else if (isValidRoll(val)) {
+      rollInput.className = 'valid';
+      rollHint.className = 'hint';
+    } else {
+      rollInput.className = 'invalid';
+      rollHint.className = 'hint show error';
+      rollHint.textContent = '3–30 alphanumeric characters, hyphens, or slashes only';
     }
-  }
-  loadStatus();
+    validateForm();
+  });
 
-  // Models are bundled with this app, so the first scan does not need a CDN.
-  async function loadModels() {
-    try {
-      cameraStatus.textContent = 'Loading face detection AI models…';
-      const MODEL_URL = '/vendor/face-api/model/';
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-      ]);
-      modelsLoaded = true;
-      cameraStatus.textContent = 'Starting camera…';
-      startCamera();
-    } catch (err) {
-      console.error('Failed to load face-api models:', err);
-      cameraStatus.textContent = 'Failed to load face detection models. Please refresh.';
-      showMsg('Failed to load AI face detection models. Check your internet connection.', 'bad');
-    }
-  }
+  // Auto-uppercase roll number as they type
+  rollInput.addEventListener('input', () => {
+    const pos = rollInput.selectionStart;
+    rollInput.value = rollInput.value.toUpperCase();
+    rollInput.setSelectionRange(pos, pos);
+  });
 
-  async function startCamera() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-        audio: false
-      });
-      video.srcObject = stream;
-      video.onloadedmetadata = () => {
-        video.play();
-        cameraStatus.textContent = 'Position your face in the oval guide';
-        startFaceDetectionLoop();
-      };
-    } catch (err) {
-      console.error('Camera access denied:', err);
-      cameraStatus.textContent = 'Camera permission required.';
-      showMsg('Camera access is required for face check-in. Please allow camera permissions.', 'bad');
-    }
-  }
+  nameInput.addEventListener('input', validateForm);
+  branchSelect.addEventListener('change', validateForm);
 
-  let detectionInterval = null;
-  function startFaceDetectionLoop() {
-    if (detectionInterval) clearInterval(detectionInterval);
-
-    detectionInterval = setInterval(async () => {
-      if (!modelsLoaded || video.paused || video.ended) return;
-
-      if (detectionInProgress) return;
-      const displaySize = { width: video.videoWidth, height: video.videoHeight };
-      if (displaySize.width === 0 || displaySize.height === 0) return;
-
-      detectionInProgress = true;
-      let detection;
-      try {
-        faceapi.matchDimensions(canvas, displaySize);
-        detection = await faceapi
-          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.55 }))
-          .withFaceLandmarks()
-          .withFaceDescriptor();
-      } catch (err) {
-        console.warn('Face scan failed:', err);
-        return;
-      } finally {
-        detectionInProgress = false;
-      }
-
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (detection) {
-        const resized = faceapi.resizeResults(detection, displaySize);
-        // Draw custom subtle face box
-        const { x, y, width, height } = resized.detection.box;
-        ctx.strokeStyle = '#29d8c0';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(x, y, width, height);
-
-        currentDescriptor = Array.from(detection.descriptor);
-        cameraBox.className = 'camera-box ready';
-        cameraStatus.textContent = 'Face detected! Ready.';
-        
-        checkInBtn.disabled = false;
-        registerBtn.disabled = false;
-      } else {
-        currentDescriptor = null;
-        cameraBox.className = 'camera-box';
-        cameraStatus.textContent = 'Align face inside the circle guide';
-        checkInBtn.disabled = true;
-        registerBtn.disabled = true;
-      }
-    }, 600);
-  }
-
-  function captureSnapshot() {
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = 240;
-    tempCanvas.height = 180;
-    const ctx = tempCanvas.getContext('2d');
-    // Mirror image back to normal orientation
-    ctx.translate(240, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, 0, 0, 240, 180);
-    return tempCanvas.toDataURL('image/jpeg', 0.65);
-  }
-
+  // ---------------------------------------------------------------------------
+  // Location
+  // ---------------------------------------------------------------------------
   function rememberPosition(pos) {
     lastPosition = pos.coords;
     lastPositionAt = pos.timestamp || Date.now();
+    locDot.className = 'loc-dot acquired';
+    locText.textContent = `Location acquired (±${Math.round(pos.coords.accuracy)}m)`;
+    validateForm();
     return pos.coords;
   }
 
@@ -551,18 +563,15 @@
       throw new Error('Browser does not support location services.');
     }
 
-    // A position obtained moments ago is still suitable for the venue check and
-    // avoids making students wait again after the camera has found their face.
+    // Reuse a recent position
     if (lastPosition && Date.now() - lastPositionAt < 5 * 60 * 1000) {
       return lastPosition;
     }
 
     try {
-      // GPS can take 20+ seconds to acquire indoors, especially on a first use.
       return await requestLocation({ enableHighAccuracy: true, timeout: 30000, maximumAge: 120000 });
     } catch (highAccuracyError) {
       try {
-        // Network-based location is a useful fallback when a GPS fix is slow.
         return await requestLocation({ enableHighAccuracy: false, timeout: 15000, maximumAge: 10 * 60 * 1000 });
       } catch (fallbackError) {
         const err = fallbackError.code ? fallbackError : highAccuracyError;
@@ -570,135 +579,167 @@
         if (err.code === 1) message = 'Location permission denied. Please allow location access and try again.';
         if (err.code === 2) message = 'Location unavailable. Turn on Location Services and try again.';
         if (err.code === 3) message = 'Location is taking too long. Move near a window or open area, then try again.';
+        locDot.className = 'loc-dot failed';
+        locText.textContent = message;
         throw new Error(message);
       }
     }
   }
 
-  async function handleCheckIn() {
-    if (!currentDescriptor) {
-      showMsg('Face not detected. Keep your face inside the frame.', 'bad');
+  function startLocationAcquisition() {
+    if (!navigator.geolocation) {
+      locDot.className = 'loc-dot failed';
+      locText.textContent = 'Location not supported';
       return;
     }
+    navigator.geolocation.getCurrentPosition(
+      rememberPosition,
+      () => {
+        locDot.className = 'loc-dot failed';
+        locText.textContent = 'Location unavailable — tap to retry';
+        locStatus.style.cursor = 'pointer';
+        locStatus.onclick = () => {
+          locDot.className = 'loc-dot acquiring';
+          locText.textContent = 'Retrying location…';
+          locStatus.style.cursor = '';
+          locStatus.onclick = null;
+          startLocationAcquisition();
+        };
+      },
+      { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }
+    );
+  }
 
-    checkInBtn.disabled = true;
-    showMsg('Getting location & matching face…', 'info');
-
+  // ---------------------------------------------------------------------------
+  // Load server status
+  // ---------------------------------------------------------------------------
+  async function loadStatus() {
     try {
-      const coords = await getLocation();
-      const { data } = await fetchJson('/api/recognize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          descriptor: currentDescriptor,
-          lat: coords.latitude,
-          lng: coords.longitude,
-          accuracy: coords.accuracy,
-          deviceId
-        })
-      }, 15000);
-
+      const { data } = await fetchJson('/api/status', {}, 8000);
       if (data.ok) {
-        cameraBox.className = 'camera-box matched';
-        showMsg(data.message + ` (${data.distance}m from venue)`, 'good');
-        
-        // Show matched student profile
-        document.getElementById('matchName').textContent = data.student.name;
-        document.getElementById('matchBranch').textContent = data.student.branch;
-        document.getElementById('matchPhoto').src = data.student.photo || 'https://via.placeholder.com/64';
-        document.getElementById('matchConfidence').textContent = `Match Confidence: ${data.confidence}%`;
-        document.getElementById('matchCard').className = 'student-match-card show';
-      } else {
-        showMsg(data.error, 'bad');
-        checkInBtn.disabled = false;
-        if (data.student) {
-          document.getElementById('matchName').textContent = data.student.name;
-          document.getElementById('matchBranch').textContent = data.student.branch;
-          document.getElementById('matchPhoto').src = 'https://via.placeholder.com/64';
-          const statusLabel = {
-            already_marked: 'Attendance already marked',
-            outside_venue: 'You are away from the venue',
-            attendance_closed: 'Attendance window is closed'
-          }[data.reason] || 'Check-in could not be completed';
-          document.getElementById('matchConfidence').textContent = statusLabel;
-          document.getElementById('matchCard').className = 'student-match-card show';
+        venueLabel.textContent = `${data.venue.label} · within ${data.venue.radius}m`;
+
+        if (data.window.open) {
+          sessionOpen = true;
+          sessionBadge.className = 'session-badge open';
+          sessionBadge.innerHTML = `<span class="pulse"></span> ${data.window.label} attendance is open`;
+        } else {
+          sessionOpen = false;
+          sessionBadge.className = 'session-badge closed';
+          sessionBadge.textContent = data.window.message;
         }
+        validateForm();
       }
     } catch (e) {
-      showMsg(e.message, 'bad');
-      checkInBtn.disabled = false;
+      venueLabel.textContent = 'Could not reach server.';
     }
   }
 
-  async function handleRegister() {
-    const name = document.getElementById('regName').value.trim();
-    const branch = document.getElementById('regBranch').value.trim();
-    const mobile = document.getElementById('regMobile').value.trim();
-    const email = document.getElementById('regEmail').value.trim();
+  // ---------------------------------------------------------------------------
+  // Form submission
+  // ---------------------------------------------------------------------------
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (isSubmitting || cooldownActive) return;
 
-    if (!name) { showMsg('Enter full name.', 'bad'); return; }
-    if (!branch) { showMsg('Enter branch.', 'bad'); return; }
-    if (!/^\d{10}$/.test(mobile)) { showMsg('Enter a valid 10-digit mobile number.', 'bad'); return; }
-    if (!currentDescriptor) { showMsg('Ensure your face is clearly visible in the camera preview.', 'bad'); return; }
+    const name = nameInput.value.trim();
+    const branch = branchSelect.value;
+    const rollNumber = rollInput.value.trim().toUpperCase();
 
-    registerBtn.disabled = true;
-    showMsg('Saving your face registration…', 'info');
+    if (!name || name.length < 2) { showMsg('Enter your full name.', 'bad'); return; }
+    if (!branch) { showMsg('Select your branch.', 'bad'); return; }
+    if (!isValidRoll(rollNumber)) { showMsg('Enter a valid roll number.', 'bad'); return; }
+
+    isSubmitting = true;
+    submitBtn.disabled = true;
+    submitBtn.classList.add('loading');
+    btnText.textContent = 'Marking attendance…';
+    hideMsg();
+    resultCard.classList.remove('show');
 
     try {
-      // Freeze the successful scan now. Do not wait for GPS: it can take many
-      // seconds on weak networks and registration is already validated by face.
-      const photo = captureSnapshot();
-      const descriptor = [...currentDescriptor];
+      // Ensure we have fresh-enough location
+      const coords = await getLocation();
+
       const payload = {
-        name, branch, mobile, email, photo, descriptor,
-        lat: lastPosition ? lastPosition.latitude : null,
-        lng: lastPosition ? lastPosition.longitude : null,
-        accuracy: lastPosition ? lastPosition.accuracy : null
+        name,
+        branch,
+        rollNumber,
+        lat: coords.latitude,
+        lng: coords.longitude,
+        accuracy: coords.accuracy,
+        deviceId,
       };
-      const request = {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      };
+
       let data;
       try {
-        ({ data } = await fetchJson('/api/register', request, 20000));
-      } catch (err) {
-        // A response may be lost after the server has saved the student. Retry
-        // once with the identical request; the server handles this idempotently.
-        ({ data } = await fetchJson('/api/register', request, 20000));
+        ({ data } = await fetchJson('/api/checkin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }, 15000));
+      } catch (fetchErr) {
+        // Retry once on network failure — server handles idempotency via unique constraints
+        ({ data } = await fetchJson('/api/checkin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }, 15000));
       }
 
       if (data.ok) {
         showMsg(data.message, 'good');
-        setTimeout(() => {
-          switchMode('checkin');
-          loadStatus();
-        }, 2000);
+
+        // Show result card
+        document.getElementById('resultName').textContent = data.student.name;
+        document.getElementById('resultBranch').textContent = data.student.branch;
+        document.getElementById('resultRoll').textContent = `Roll: ${data.student.rollNumber}`;
+        document.getElementById('resultSession').textContent = data.message;
+        document.getElementById('resultDist').textContent = `${data.distance}m from venue`;
+        resultCard.classList.add('show');
+
+        // Cooldown — prevent double-tap and accidental re-submissions
+        cooldownActive = true;
+        let countdown = 30;
+        btnText.textContent = `Done! Wait ${countdown}s…`;
+        const timer = setInterval(() => {
+          countdown--;
+          if (countdown <= 0) {
+            clearInterval(timer);
+            cooldownActive = false;
+            btnText.textContent = 'Mark Attendance';
+            submitBtn.classList.remove('loading');
+            isSubmitting = false;
+            validateForm();
+          } else {
+            btnText.textContent = `Done! Wait ${countdown}s…`;
+          }
+        }, 1000);
       } else {
         showMsg(data.error, 'bad');
-        registerBtn.disabled = false;
+        submitBtn.classList.remove('loading');
+        btnText.textContent = 'Mark Attendance';
+        isSubmitting = false;
+        validateForm();
       }
-    } catch (e) {
-      showMsg(e.message, 'bad');
-      registerBtn.disabled = false;
+    } catch (err) {
+      showMsg(err.message || 'Network error. Check your connection and try again.', 'bad');
+      submitBtn.classList.remove('loading');
+      btnText.textContent = 'Mark Attendance';
+      isSubmitting = false;
+      validateForm();
     }
-  }
+  });
 
+  // ---------------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------------
   window.addEventListener('DOMContentLoaded', () => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(err => console.warn('Offline cache unavailable:', err));
-    }
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        rememberPosition,
-        () => {},
-        // Start acquiring a position before the student taps Check In.
-        { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }
-      );
-    }
-    // Start face api model loading after page mounts
-    setTimeout(loadModels, 500);
+    loadStatus();
+    startLocationAcquisition();
+
+    // Refresh session status every 60s
+    setInterval(loadStatus, 60000);
   });
 </script>
 </body>

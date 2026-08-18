@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: attendance-face-system
+    name: attendance-system
     runtime: node
     buildCommand: npm install
     startCommand: npm start
@@ -10,8 +10,6 @@ services:
         value: production
       - key: DATABASE_SSL
         value: "true"
-      - key: FACE_MATCH_THRESHOLD
-        value: "0.6"
       - key: ADMIN_PASSWORD
         sync: false
       - key: DATABASE_URL

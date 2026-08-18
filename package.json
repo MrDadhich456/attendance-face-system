@@ -5,11 +5,18 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop attendance-system",
+    "pm2:restart": "pm2 restart attendance-system",
+    "pm2:logs": "pm2 logs attendance-system",
+    "pm2:status": "pm2 status"
   },
   "dependencies": {
+    "compression": "^1.8.0",
     "express": "^5.2.1",
     "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
     "pg": "^8.16.3"
   }
 }

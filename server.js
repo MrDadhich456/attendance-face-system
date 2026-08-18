@@ -3,6 +3,8 @@ const { Pool } = require('pg');
 const path = require('path');
 const fs = require('fs');
 const rateLimit = require('express-rate-limit');
+const compression = require('compression');
+const helmet = require('helmet');
 
 // Auto-load .env file if available
 const envPath = path.join(__dirname, '.env');
@@ -32,7 +34,22 @@ if (!DATABASE_URL) {
 }
 
 // ---------------------------------------------------------------------------
-// PostgreSQL connection pool — tuned for ~250 concurrent users
+// Production middleware — compression, security headers, proxy trust
+// ---------------------------------------------------------------------------
+
+// Trust nginx reverse proxy (for correct IP in rate limiting & logs)
+app.set('trust proxy', 1);
+
+// Gzip compression — reduces response size by ~70%
+app.use(compression());
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false,  // allow inline scripts in our HTML
+}));
+
+// ---------------------------------------------------------------------------
+// PostgreSQL connection pool — tuned for ~300 concurrent users
 // ---------------------------------------------------------------------------
 
 const pool = new Pool({
@@ -45,7 +62,12 @@ const pool = new Pool({
 
 // No more base64 photos — keep a small JSON limit
 app.use(express.json({ limit: '100kb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+
+// Static files with caching headers (1 hour for HTML, 7 days for assets)
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '1h',
+  etag: true,
+}));
 
 // ---------------------------------------------------------------------------
 // Rate limiting — prevent abuse on check-in endpoint

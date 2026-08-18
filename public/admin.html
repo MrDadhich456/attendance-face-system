@@ -117,6 +117,17 @@
   }
   .badge.session { background: #e8f0fe; color: #1a73e8; }
   .badge.device { background: #fef3e0; color: #e65100; font-family: monospace; font-size: 10px; }
+  .badge.mobile {
+    background: rgba(99, 102, 241, 0.1);
+    color: #4338ca;
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(99, 102, 241, 0.22);
+    letter-spacing: 0.04em;
+  }
 
   .toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -376,7 +387,7 @@
     body.innerHTML = rows.map(r => `<tr>
       <td><strong>${escapeHtml(r.name)}</strong></td>
       <td>${escapeHtml(r.branch)}</td>
-      <td><code style="background:#f0f2f8; padding:2px 6px; border-radius:4px; font-size:12px;">${escapeHtml(r.mobile)}</code></td>
+      <td><span class="badge mobile">📱 ${escapeHtml(r.mobile)}</span></td>
       <td><span class="badge session">${r.session === 'morning' ? 'Before lunch' : 'After lunch'}</span></td>
       <td>${new Date(r.timestamp).toLocaleTimeString()}</td>
       <td>${r.distance_m ? Math.round(r.distance_m) + 'm' : '—'}</td>
@@ -411,7 +422,7 @@
     body.innerHTML = data.devices.map(d => `<tr>
       <td><span class="badge device">${escapeHtml(d.device_id.slice(0, 16))}…</span></td>
       <td><span class="badge session">${d.session === 'morning' ? 'Before lunch' : 'After lunch'}</span></td>
-      <td><code style="background:#f0f2f8; padding:2px 6px; border-radius:4px; font-size:12px;">${escapeHtml(d.mobile)}</code></td>
+      <td><span class="badge mobile">📱 ${escapeHtml(d.mobile)}</span></td>
       <td>${new Date(d.marked_at).toLocaleTimeString()}</td>
     </tr>`).join('');
   }

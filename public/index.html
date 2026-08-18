@@ -312,6 +312,19 @@
     padding: 4px 12px;
     border-radius: 8px;
   }
+  .result-card .mobile-tag {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    color: #46e0ca;
+    background: rgba(70, 224, 202, .14);
+    border: 1px solid rgba(70, 224, 202, .25);
+    padding: 3px 10px;
+    border-radius: 8px;
+    letter-spacing: 0.05em;
+  }
 
   .divider {
     height: 1px;
@@ -415,7 +428,7 @@
       <div class="result-details">
         <h3 id="resultName">Name</h3>
         <p id="resultBranch">Branch</p>
-        <p id="resultMobile">Mobile</p>
+        <div><span class="mobile-tag" id="resultMobile">📱 Mobile</span></div>
         <span class="session-tag" id="resultSession">Before lunch</span>
         <p id="resultDist" style="margin-top: 6px; font-size: 11px; color: #8f9db8;"></p>
       </div>
@@ -687,7 +700,7 @@
         // Show result card
         document.getElementById('resultName').textContent = data.student.name;
         document.getElementById('resultBranch').textContent = data.student.branch;
-        document.getElementById('resultMobile').textContent = `Mobile: ${data.student.mobile}`;
+        document.getElementById('resultMobile').textContent = `📱 ${data.student.mobile}`;
         document.getElementById('resultSession').textContent = data.message;
         document.getElementById('resultDist').textContent = `${data.distance}m from venue`;
         resultCard.classList.add('show');

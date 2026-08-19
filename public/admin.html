@@ -150,6 +150,11 @@
     background: #fafbff;
   }
   .search-bar:focus { outline: none; border-color: var(--primary); }
+  .filter-grid { display: grid; grid-template-columns: 2fr repeat(3, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .filter-control { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: #fafbff; color: var(--ink); font: inherit; font-size: 13px; }
+  .filter-control:focus { outline: none; border-color: var(--primary); }
+  .filter-summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--ink-soft); font-size: 12px; margin: 0 0 12px; }
+  @media (max-width: 760px) { .filter-grid { grid-template-columns: 1fr 1fr; } .filter-grid .search-bar { grid-column: 1 / -1; margin-bottom: 0; } }
 
   .empty-state {
     text-align: center;
@@ -196,7 +201,17 @@
           <button class="primary" onclick="exportCsv()">Export CSV</button>
         </div>
       </div>
-      <input type="text" class="search-bar" id="attSearch" placeholder="Search by name, branch, or mobile number…" oninput="filterAttendanceTable()" />
+      <div class="filter-grid" aria-label="Attendance filters">
+        <input type="text" class="search-bar" id="attSearch" placeholder="Search name or mobile number…" oninput="filterAttendanceTable()" />
+        <select id="branchFilter" class="filter-control" onchange="filterAttendanceTable()"><option value="">All branches</option></select>
+        <select id="sessionFilter" class="filter-control" onchange="filterAttendanceTable()">
+          <option value="">All sessions</option><option value="morning">Before lunch</option><option value="afternoon">After lunch</option>
+        </select>
+        <select id="distanceFilter" class="filter-control" onchange="filterAttendanceTable()">
+          <option value="">Any distance</option><option value="100">Within 100 m</option><option value="250">Within 250 m</option><option value="500">Within 500 m</option>
+        </select>
+      </div>
+      <div class="filter-summary"><span id="filterSummary">0 records</span><button class="ghost" type="button" onclick="clearAttendanceFilters()">Clear filters</button></div>
       <div style="overflow-x:auto;">
         <table>
           <thead>
@@ -375,13 +390,24 @@
     attendanceData = data.present;
     document.getElementById('statPresent').textContent = data.presentCount;
     document.getElementById('statBranches').textContent = data.branchCount;
-    renderAttendanceTable(attendanceData);
+    populateBranchFilter();
+    filterAttendanceTable();
+  }
+
+  function populateBranchFilter() {
+    const select = document.getElementById('branchFilter');
+    const selected = select.value;
+    const branches = [...new Set(attendanceData.map(r => r.branch).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    select.innerHTML = '<option value="">All branches</option>' + branches.map(branch =>
+      `<option value="${escapeHtml(branch)}">${escapeHtml(branch)}</option>`
+    ).join('');
+    select.value = branches.includes(selected) ? selected : '';
   }
 
   function renderAttendanceTable(rows) {
     const body = document.getElementById('attBody');
     if (rows.length === 0) {
-      body.innerHTML = '<tr><td colspan="7" class="empty-state">No check-ins found for this date</td></tr>';
+      body.innerHTML = '<tr><td colspan="7" class="empty-state">No records match these filters</td></tr>';
       return;
     }
     body.innerHTML = rows.map(r => `<tr>
@@ -397,16 +423,25 @@
 
   function filterAttendanceTable() {
     const query = document.getElementById('attSearch').value.toLowerCase().trim();
-    if (!query) {
-      renderAttendanceTable(attendanceData);
-      return;
-    }
+    const branch = document.getElementById('branchFilter').value;
+    const session = document.getElementById('sessionFilter').value;
+    const maxDistance = Number(document.getElementById('distanceFilter').value);
     const filtered = attendanceData.filter(r =>
-      r.name.toLowerCase().includes(query) ||
-      r.branch.toLowerCase().includes(query) ||
-      (r.mobile || '').includes(query)
+      (!query || r.name.toLowerCase().includes(query) || (r.mobile || '').includes(query)) &&
+      (!branch || r.branch === branch) &&
+      (!session || r.session === session) &&
+      (!maxDistance || (Number.isFinite(Number(r.distance_m)) && Number(r.distance_m) <= maxDistance))
     );
     renderAttendanceTable(filtered);
+    document.getElementById('filterSummary').textContent = `${filtered.length} of ${attendanceData.length} records`;
+  }
+
+  function clearAttendanceFilters() {
+    document.getElementById('attSearch').value = '';
+    document.getElementById('branchFilter').value = '';
+    document.getElementById('sessionFilter').value = '';
+    document.getElementById('distanceFilter').value = '';
+    filterAttendanceTable();
   }
 
   async function loadDevices() {

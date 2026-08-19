@@ -292,7 +292,7 @@ app.get('/api/status', async (req, res, next) => {
         open: !!session,
         session,
         label: session ? sessionLabel(session) : null,
-        message: `Attendance: ${venue.morning_start}–${venue.morning_end} (before lunch) · ${venue.afternoon_start}–${venue.afternoon_end} (after lunch).`,
+        message: session ? 'Attendance is open.' : 'Attendance is currently closed.',
       },
     });
   } catch (err) {
@@ -335,7 +335,7 @@ app.post('/api/checkin', checkinLimiter, async (req, res, next) => {
       return res.status(403).json({
         ok: false,
         reason: 'attendance_closed',
-        error: `Attendance is closed right now. Windows: ${venue.morning_start}–${venue.morning_end} and ${venue.afternoon_start}–${venue.afternoon_end}.`,
+        error: 'Attendance is currently closed. Please try again when it is open.',
       });
     }
 
